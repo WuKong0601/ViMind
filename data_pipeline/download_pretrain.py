@@ -1,7 +1,10 @@
 import os
+import sys
 import json
 from datasets import load_dataset
 from tqdm import tqdm
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from clean_and_normalize import normalize_vietnamese_text, is_valid_text
 
 def main():
