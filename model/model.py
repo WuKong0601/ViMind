@@ -438,22 +438,24 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             if top_k > 0:
                 top_k_vals, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                 min_top_k = top_k_vals[:, -1].unsqueeze(-1)
-                logits = torch.where(logits < min_top_k, torch.tensor(float("-inf"), device=logits.device), logits)
+                logits = torch.where(logits < min_top_k, torch.tensor(-1e9, device=logits.device, dtype=logits.dtype), logits)
 
             # Top-P (Nucleus) filtering
             if 0.0 < top_p < 1.0:
                 sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-                cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+                cumulative_probs = torch.cumsum(F.softmax(sorted_logits.float(), dim=-1), dim=-1)
                 sorted_indices_to_remove = cumulative_probs > top_p
-                # Shift right so we keep at least the first token above threshold
                 sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
                 sorted_indices_to_remove[..., 0] = 0
                 indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-                logits = logits.masked_fill(indices_to_remove, float("-inf"))
+                logits = logits.masked_fill(indices_to_remove, -1e9)
 
-            # Sampling or greedy
+            # Sampling or greedy (strictly computed in float32 for numerical stability)
             if temperature > 0:
-                probs = F.softmax(logits, dim=-1)
+                probs = F.softmax(logits.float(), dim=-1)
+                probs = torch.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)
+                prob_sum = probs.sum(dim=-1, keepdim=True)
+                probs = torch.where(prob_sum > 0, probs / prob_sum, torch.ones_like(probs) / probs.size(-1))
                 next_token = torch.multinomial(probs, num_samples=1)
             else:
                 next_token = torch.argmax(logits, dim=-1, keepdim=True)
