@@ -51,3 +51,60 @@ class PretrainDataset(Dataset):
         labels[input_tensor == pad_id] = -100
 
         return input_tensor, labels
+
+
+class SFTDataset(Dataset):
+    """
+    Dataset for Supervised Fine-Tuning (SFT) ViMind on conversational data.
+    Applies Loss Masking: only computes loss on assistant responses (user prompt and pad tokens are -100).
+    """
+
+    def __init__(self, data_path: str, tokenizer, max_length: int = 512):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.samples = load_dataset("json", data_files=data_path, split="train")
+        self.bos_asst_ids = tokenizer("<s>assistant\n", add_special_tokens=False).input_ids
+        self.eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 2
+        self.pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+
+    def __len__(self):
+        return len(self.samples)
+
+    def _generate_labels(self, input_ids: list) -> list:
+        labels = [-100] * len(input_ids)
+        asst_len = len(self.bos_asst_ids)
+        i = 0
+        while i <= len(input_ids) - asst_len:
+            if input_ids[i : i + asst_len] == self.bos_asst_ids:
+                start = i + asst_len
+                end = start
+                while end < len(input_ids) and input_ids[end] != self.eos_id:
+                    end += 1
+                # Include EOS token in training so model learns when to terminate generation
+                if end < len(input_ids):
+                    end += 1
+                for j in range(start, min(end, len(input_ids))):
+                    labels[j] = input_ids[j]
+                i = end
+            else:
+                i += 1
+        return labels
+
+    def __getitem__(self, index):
+        sample = self.samples[index]
+        conversations = sample.get("conversations", [])
+
+        # Format conversation via chat template
+        full_text = self.tokenizer.apply_chat_template(conversations, tokenize=False)
+        input_ids = self.tokenizer(full_text, add_special_tokens=False).input_ids[: self.max_length]
+
+        labels = self._generate_labels(input_ids)
+
+        # Padding
+        padding_len = self.max_length - len(input_ids)
+        if padding_len > 0:
+            input_ids = input_ids + [self.pad_id] * padding_len
+            labels = labels + [-100] * padding_len
+
+        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(labels, dtype=torch.long)
