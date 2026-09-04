@@ -24,7 +24,14 @@ def run_dry_run():
     print("🧪 RUNNING VIMIND PRE-TRAINING DRY RUN TEST")
     print("=" * 60)
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+    if torch.cuda.is_available():
+        try:
+            test_x = torch.zeros(1, device="cuda") + 1
+            _ = test_x.cpu()
+            device = torch.device("cuda:0")
+        except Exception as e:
+            print(f"⚠️ CUDA test failed ({e}). Falling back to CPU.")
     print(f"Device: {device}")
 
     # 1. Load Tokenizer

@@ -68,8 +68,17 @@ def get_parser():
 
 def train_sft(args):
     # Device setup
-    device = torch.device(args.device)
-    device_type = "cuda" if "cuda" in args.device else "cpu"
+    if "cuda" in args.device and torch.cuda.is_available():
+        try:
+            test_x = torch.zeros(1, device=args.device) + 1
+            _ = test_x.cpu()
+            device = torch.device(args.device)
+        except Exception as e:
+            print(f"⚠️ CUDA kernel execution failed ({e}). Falling back to CPU.")
+            device = torch.device("cpu")
+    else:
+        device = torch.device(args.device)
+    device_type = "cuda" if "cuda" in str(device) else "cpu"
 
     # Precision setup
     if args.dtype == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
