@@ -1,0 +1,17 @@
+{
+  "id": "cnghunhlquc/vimind-training-kernel",
+  "title": "ViMind Training Kernel",
+  "code_file": "train_notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_tpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "cnghunhlquc/vimind-corpus"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -1,0 +1,7 @@
+dataset/
+out/
+venv/
+.git/
+*.pth
+*.safetensors
+__pycache__/
