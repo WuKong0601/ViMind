@@ -63,8 +63,11 @@ st.markdown(
 )
 
 
+DEFAULT_CKPT = "out/dpo/vimind_dpo_final" if os.path.exists("out/dpo/vimind_dpo_final") else "out/sft/vimind_sft_final"
+
+
 @st.cache_resource(show_spinner=False)
-def load_vimind_model(model_path: str = "out/sft/vimind_sft_final"):
+def load_vimind_model(model_path: str = DEFAULT_CKPT):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     tokenizer_dir = model_path if os.path.exists(os.path.join(model_path, "tokenizer_config.json")) else "model"
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir)
@@ -85,8 +88,8 @@ with st.sidebar:
     st.markdown("### ⚙️ Cấu Hình Mô Hình")
     model_path_input = st.text_input(
         "Đường dẫn Checkpoint:",
-        value="out/sft/vimind_sft_final",
-        help="Đường dẫn đến thư mục chứa model sau khi train SFT.",
+        value=DEFAULT_CKPT,
+        help="Đường dẫn đến thư mục chứa model sau khi huấn luyện (DPO hoặc SFT).",
     )
 
     with st.spinner("Đang nạp mô hình..."):

@@ -39,8 +39,10 @@ data_pipeline/processed/
 .vscode/
 .idea/
 *.log
+!experiments/**/*.log
 wandb/
 swanlab/
 
 kaggle_outputs*/
 kaggle_logs*/
+

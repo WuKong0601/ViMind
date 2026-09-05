@@ -14,13 +14,16 @@ if sys.platform == "win32":
 from transformers import AutoTokenizer
 from model.model import ViMindForCausalLM
 
-MODEL_PATH = "out/sft/vimind_sft_final"
+from model.model import ViMindForCausalLM
+
+DEFAULT_MODEL_PATH = "out/dpo/vimind_dpo_final" if os.path.exists("out/dpo/vimind_dpo_final") else "out/sft/vimind_sft_final"
+MODEL_PATH = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MODEL_PATH
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def run_benchmark():
     print("=" * 70)
-    print("🚀 BẮT ĐẦU KIỂM THỬ TOÀN DIỆN MÔ HÌNH VIMIND 26M (SFT FINAL)")
+    print(f"🚀 BẮT ĐẦU KIỂM THỬ TOÀN DIỆN MÔ HÌNH VIMIND ({'DPO FINAL - 1.0' if 'dpo' in MODEL_PATH else 'SFT FINAL'})")
     print("=" * 70)
     print(f"📍 Đường dẫn mô hình: {MODEL_PATH}")
     print(f"⚡ Thiết bị phần cứng: {DEVICE}")
@@ -31,7 +34,8 @@ def run_benchmark():
         print(f"🎮 GPU: {gpu_name}")
 
     start_load = time.time()
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+    tokenizer_dir = MODEL_PATH if os.path.exists(os.path.join(MODEL_PATH, "tokenizer_config.json")) else "model"
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir)
     model = ViMindForCausalLM.from_pretrained(MODEL_PATH).to(DEVICE)
     model.eval()
     load_time = time.time() - start_load

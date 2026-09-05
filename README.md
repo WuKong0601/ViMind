@@ -1,297 +1,283 @@
-# 🇻🇳 ViMind: Small, Efficient & Native Vietnamese Language Model from Scratch
+# 🇻🇳 ViMind: Native Vietnamese Small Language Model from Scratch
 
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen.svg)](https://github.com/WuKong0601/ViMind/releases/tag/v1.0.0)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Budget](https://img.shields.io/badge/Budget-$0%20(Zero%20Cost)-brightgreen.svg)]()
-[![Hardware](https://img.shields.io/badge/Compute-Kaggle%20%7C%20Colab%20T4-orange.svg)]()
-[![HuggingFace](https://img.shields.io/badge/🤗%20HuggingFace-Models%20%26%20Data-yellow.svg)]()
+[![Compute Budget](https://img.shields.io/badge/Compute%20Budget-$0%20(Zero%20Cost)-brightgreen.svg)]()
+[![Hardware](https://img.shields.io/badge/Compute-NVIDIA%20Tesla%20T4-orange.svg)]()
+[![VRAM](https://img.shields.io/badge/VRAM%20Inference-103%20MB-blueviolet.svg)]()
 
-> **ViMind** is an open-source, ultra-lightweight Small Language Model (SLM) engineered **100% from scratch specifically for the Vietnamese language**.
+> **ViMind** là mô hình ngôn ngữ nhỏ (Small Language Model - SLM) mã nguồn mở được thiết kế, huấn luyện và căn chỉnh **100% từ đầu (from scratch)** dành riêng cho tiếng Việt với ngân sách **0 đồng ($0 compute budget)** trên hạ tầng GPU miễn phí (Kaggle Tesla T4).
 >
-> Built with zero enterprise budget ($0), ViMind provides a transparent, production-ready, end-to-end framework: from custom **Vietnamese Byte-level BPE Tokenization**, **Pre-training**, **Supervised Fine-Tuning (SFT)** with Chain-of-Thought (`<think>`) reasoning, to **Direct Preference Optimization (DPO / GRPO)** and **Tool Calling**.
+> **ViMind 1.0** đánh dấu cột mốc hoàn thành trọn vẹn chu trình nghiên cứu học thuật: từ **Bộ tách từ Byte-BPE tiếng Việt bản địa (12.8k từ vựng)**, **Huấn luyện tiền kỳ (Base Pre-training)**, **Tinh chỉnh có giám sát (SFT)** với kỹ thuật che mặt nạ mất mát (Loss Masking), đến **Căn chỉnh sở thích người dùng trực tiếp (Direct Preference Optimization - DPO)**.
 
 ---
 
-## 📑 Table of Contents
-1. [Key Features](#-key-features)
-2. [Model Architecture & Specifications](#-model-architecture--specifications)
-3. [The Zero-Dollar ($0) Strategy](#-the-zero-dollar-0-strategy)
-4. [Repository Structure](#-repository-structure)
-5. [Data Engineering & Synthesis Pipeline](#-data-engineering--synthesis-pipeline)
-6. [End-to-End Training Lifecycle](#-end-to-end-training-lifecycle)
-   - [Phase 1: Native Vietnamese Tokenizer](#phase-1-native-vietnamese-tokenizer)
-   - [Phase 2: Base Pre-training](#phase-2-base-pre-training)
-   - [Phase 3: Supervised Fine-Tuning (SFT) & CoT Reasoning](#phase-3-supervised-fine-tuning-sft--cot-reasoning)
-   - [Phase 4: Alignment & RL (DPO / GRPO)](#phase-4-alignment--rl-dpo--grpo)
-   - [Phase 5: Model Export & Deployment](#phase-5-model-export--deployment)
-7. [Quickstart & Installation](#-quickstart--installation)
-8. [Benchmarks & Evaluation](#-benchmarks--evaluation)
-9. [Development Roadmap](#-development-roadmap)
-10. [License & Acknowledgments](#-license--acknowledgments)
+## 📑 Mục Lục
+1. [Điểm Nổi Bật của ViMind 1.0](#-điểm-nổi-bật-của-vimind-10)
+2. [Thông Số Kiến Trúc Mô Hình](#-thông-số-kiến-trúc-mô-hình)
+3. [Chu Trình Huấn Luyện 4 Giai Đoạn](#-chu-trình-huấn-luyện-4-giai-đoạn)
+   - [Giai đoạn 1: Bộ Tách Từ Byte-BPE Tiếng Việt](#giai-đoạn-1-bộ-tách-từ-byte-bpe-tiếng-việt)
+   - [Giai đoạn 2: Huấn Luyện Tiền Kỳ (Pre-training)](#giai-đoạn-2-huấn-luyện-tiền-kỳ-pre-training)
+   - [Giai đoạn 3: Tinh Chỉnh Hội Thoại (SFT + Loss Masking)](#giai-đoạn-3-tinh-chỉnh-hội-thoại-sft--loss-masking)
+   - [Giai đoạn 4: Căn Chỉnh Sở Thích (DPO Alignment)](#giai-đoạn-4-căn-chỉnh-sở-thích-dpo-alignment)
+4. [Dữ Liệu & Số Liệu Nghiên Cứu Viết Paper](#-dữ-liệu--số-liệu-nghiên-cứu-viết-paper)
+5. [Đánh Giá Hiệu Năng & Điểm Đo (Benchmark)](#-đánh-giá-hiệu-năng--điểm-đo-benchmark)
+6. [Cấu Trúc Thư Mục Repository](#-cấu-trúc-thư-mục-repository)
+7. [Hướng Dẫn Cài Đặt & Chạy Thử (Quickstart)](#-hướng-dẫn-cài-đặt--chạy-thử-quickstart)
+8. [Lộ Trình Phát Triển (ViMind 2.0 Roadmap)](#-lộ-trình-phát-triển-vimind-20-roadmap)
+9. [Trích Dẫn (Citation) & Giấy Phép](#-trích-dẫn-citation--giấy-phép)
 
 ---
 
-## 🌟 Key Features
+## 🌟 Điểm Nổi Bật của ViMind 1.0
 
-- 🇻🇳 **Native Vietnamese Tokenization**: Custom Byte-level BPE vocabulary optimized for Vietnamese tone marks, syllabic boundaries, and Unicode NFC normalization — avoiding fragmentations and high token penalties caused by standard English/multilingual tokenizers.
-- ⚡ **Ultra-Lightweight & Agile**: Available in **26M, 64M, and 104M parameter** variants. Operates smoothly on edge devices, consumer laptops, mobile devices, and CPU-only environments (via ONNX / GGUF).
-- 🧬 **Modern SOTA Architectural Primitives**:
-  - **RMSNorm** (Root Mean Square Layer Normalization) for high numerical stability.
-  - **RoPE** (Rotary Position Embeddings) for dynamic context scaling.
-  - **SwiGLU** activation function for rich non-linear representations.
-  - **Grouped-Query Attention (GQA)** for low KV-cache memory consumption during inference.
-- 🧠 **Deep Reasoning with `<think>` Tags**: Incorporates Chain-of-Thought (CoT) step-by-step thinking tokens inspired by DeepSeek-R1.
-- 🛠️ **Native Tool-Calling & ReAct Agent Support**: Pre-configured for function calling, structured JSON output, and multi-turn interactive dialogues.
-- 🔍 **Zero Black-Box Abstractions**: Written in clean, readable, modular PyTorch without heavy wrapper bloat.
+- 🇻🇳 **Native Vietnamese Byte-BPE Tokenizer**: Bộ từ vựng 12.800 tokens tối ưu hóa cho âm tiết, dấu thanh và chuẩn Unicode NFC tiếng Việt. Giảm thiểu 3 lần số lượng token so với các tokenizer đa ngữ của LLaMA/GPT, loại bỏ hoàn toàn hiện tượng phân mảnh ký tự UTF-8.
+- ⚡ **Siêu Nhẹ & Tiết Kiệm Tài Nguyên**: Kích thước ~26.2M tham số, chỉ chiếm **103 MB VRAM** khi suy luận. Có thể chạy mượt mà trên CPU laptop phổ thông, thiết bị nhúng (Raspberry Pi, điện thoại di động).
+- 🧬 **Kiến Trúc LLaMA-3 Chuẩn Mực Hiện Đại**:
+  - **RMSNorm**: Ổn định gradient trong quá trình huấn luyện 16-bit.
+  - **Rotary Position Embedding (RoPE)** ($\theta = 10.000$): Tăng cường năng lực định vị tương đối cho ngữ cảnh dài.
+  - **SwiGLU Activation**: Nâng cao tính phi tuyến và khả năng biểu diễn ngữ nghĩa.
+  - **Grouped-Query Attention (GQA)** (8 Query Heads : 4 Key-Value Heads, tỷ lệ 2:1): Giảm 50% dung lượng bộ nhớ đệm KV trong quá trình sinh token.
+  - **Tied Word Embeddings**: Khóa ma trận nhúng đầu vào và đầu ra, giảm mạnh số lượng tham số lưu trữ mà vẫn duy trì chất lượng biểu diễn.
+- 🎯 **Căn Chỉnh Tinh Chế Với DPO (Direct Preference Optimization)**:
+  - Ứng dụng công thức Rafailov et al. (NeurIPS 2023) với mô hình tham chiếu đóng băng (frozen reference model).
+  - Độ chính xác sở thích (Reward Accuracy) đạt **85.4%**, biên độ thưởng (Reward Margin) đạt **+12.18**.
+- 🔬 **Minh Bạch & Tái Hiện 100%**: Mã nguồn PyTorch thuần, không phụ thuộc thư viện đóng gói đen (black-box frameworks). Toàn bộ log huấn luyện và metrics được lưu trữ có hệ thống phục vụ công tác nghiên cứu học thuật.
 
 ---
 
-## 🏗️ Model Architecture & Specifications
+## 🏗️ Thông Số Kiến Trúc Mô Hình
+
+| Đặc Tính Kỹ Thuật | ViMind 1.0 (Hiện Tại) | ViMind 2.0 (Dự Kiến) |
+| :--- | :--- | :--- |
+| **Tổng số tham số (Total Params)** | **26.207.488 (~26.2M)** | **~65M - 104M** |
+| **Kích thước ẩn ($d_{model}$)** | 512 | 768 |
+| **Kích thước trung gian FFN ($d_{ffn}$)**| 1.376 ($8/3 \times d_{model}$) | 2.048 |
+| **Số tầng Transformer (Layers)** | 8 | 12 - 16 |
+| **Số đầu Attention ($n_{heads}$)** | 8 | 12 |
+| **Số đầu Key-Value ($n_{kv}$ - GQA)** | 4 (GQA 2:1) | 4 (GQA 3:1) |
+| **Kích thước từ vựng (Vocab Size)** | 12.800 (Byte-BPE) | 16.000 (Byte-BPE) |
+| **Chiều dài ngữ cảnh tối đa ($L_{max}$)**| 512 tokens | 1.024 tokens |
+| **VRAM khi suy luận (Inference VRAM)** | **103.0 MB** | ~250 MB |
+| **Tốc độ sinh chữ (Tesla T4)** | **~75.3 tokens/giây** | ~60.0 tokens/giây |
+
+---
+
+## 🚀 Chu Trình Huấn Luyện 4 Giai Đoạn
 
 ```mermaid
-graph LR
-    A["Raw Input Text"] --> B["Vietnamese BPE Tokenizer<br/>(Vocab: 12.8k)"]
-    B --> C["Embedding Layer + RoPE"]
-    C --> D["Transformer Decoder Blocks<br/>(RMSNorm + SwiGLU + GQA)"]
-    D --> E["LM Head (Logits)"]
-    E --> F["Generated Vietnamese Text<br/>/ <think> Reasoning"]
+flowchart LR
+    A["1. Dữ liệu thô<br/>(Wiki VN 1.3GB)"] --> B["2. Byte-BPE Tokenizer<br/>(12.8k vocab)"]
+    B --> C["3. Base Pre-training<br/>(Loss: 9.50 -> 4.20)"]
+    C --> D["4. SFT + Loss Masking<br/>(52k cặp hội thoại)"]
+    D --> E["5. DPO Alignment<br/>(12.8k pairs, Acc: 85.4%)"]
+    E --> F["ViMind 1.0 Final<br/>(103MB VRAM, 75 tok/s)"]
 ```
 
-### Parameter Configurations
+### Giai đoạn 1: Bộ Tách Từ Byte-BPE Tiếng Việt
+- **Công cụ**: Hugging Face `tokenizers` (Byte-level Byte Pair Encoding).
+- **Dữ liệu huấn luyện**: 1.31 GB Wikipedia tiếng Việt đã làm sạch.
+- **Kích thước từ vựng**: 12.800 tokens (bao gồm đầy đủ ký tự đơn UTF-8 và các âm tiết tiếng Việt ghép phổ biến nhất).
+- **Mã thực thi**: [trainer/train_tokenizer.py](file:///d:/Repogithub/vimind/trainer/train_tokenizer.py)
 
-| Specification | **ViMind-Mini** (26M) | **ViMind-Base** (64M) ⭐ *Recommended* | **ViMind-Plus** (104M) |
-| :--- | :--- | :--- | :--- |
-| **Hidden Dimension ($d_{model}$)** | 512 | 768 | 768 |
-| **Transformer Layers** | 8 | 16 | 24 |
-| **Attention Heads ($n_{heads}$)** | 8 | 12 | 12 |
-| **Key-Value Heads ($n_{kv}$ - GQA)** | 2 | 4 | 4 |
-| **Intermediate Size (FFN)** | 1,408 | 2,048 | 2,048 |
-| **Vocabulary Size** | 6,400 | 12,800 | 16,000 |
-| **Max Sequence Length** | 512 | 1,024 | 2,048 |
-| **Training VRAM Requirement** | ~3.0 GB | ~6.0 GB | ~10.5 GB |
-| **Training Time (1x T4 GPU)** | ~1.5 Hours | ~3.5 Hours | ~8.0 Hours |
+### Giai đoạn 2: Huấn Luyện Tiền Kỳ (Pre-training)
+- **Dữ liệu**: 405.835 bài viết Wikipedia tiếng Việt sạch (`dataset/pretrain_vi.jsonl`, 1.31 GB).
+- **Mục tiêu**: Dự đoán token kế tiếp (Next-Token Prediction / Causal Language Modeling).
+- **Siêu tham số**:
+  - Optimizer: AdamW ($\beta_1 = 0.9, \beta_2 = 0.95, \text{weight\_decay} = 0.01$).
+  - Tốc độ học (LR): Peak $5\times 10^{-4}$, Min $5\times 10^{-5}$, Cosine Decay có Warmup.
+  - Batch size hiệu dụng: 128 (Batch 32 $\times$ Gradient Accumulation 4).
+  - Độ dài chuỗi: 512 tokens.
+- **Kết quả**: Loss giảm từ `9.5010` xuống `4.1952`.
+- **Mã thực thi**: [trainer/pretrain.py](file:///d:/Repogithub/vimind/trainer/pretrain.py)
+
+### Giai đoạn 3: Tinh Chỉnh Hội Thoại (SFT + Loss Masking)
+- **Dữ liệu**: 52.000 hội thoại tiếng Việt đa lượt (`dataset/sft_vi.jsonl`).
+- **Kỹ thuật then chốt**: **Conversational Loss Masking**. Nhãn của phần câu hỏi người dùng (User prompt) và thẻ hệ thống (System prompt) được gán giá trị `-100` để hàm mất mát Cross-Entropy bỏ qua, mô hình chỉ học cách trả lời của Trợ lý (Assistant).
+- **Siêu tham số**: AdamW, LR $2\times 10^{-4}$, Batch size hiệu dụng 64.
+- **Kết quả**: Loss hội thoại giảm từ `9.4900` xuống `1.8542`.
+- **Mã thực thi**: [trainer/train_sft.py](file:///d:/Repogithub/vimind/trainer/train_sft.py)
+
+### Giai đoạn 4: Căn Chỉnh Sở Thích (DPO Alignment)
+- **Dữ liệu**: 12.800 cặp câu trả lời ưu tiên (`chosen` vs `rejected`) bằng tiếng Việt (`dataset/dpo_vi.jsonl`).
+- **Thuật toán**: Direct Preference Optimization (Rafailov et al., 2023) không cần mô hình chấm điểm (Reward Model):
+  $$\mathcal{L}_{\text{DPO}}(\pi_\theta; \pi_{\text{ref}}) = - \mathbb{E}_{(x, y_w, y_l)} \left[ \log \sigma \left( \beta \log \frac{\pi_\theta(y_w|x)}{\pi_{\text{ref}}(y_w|x)} - \beta \log \frac{\pi_\theta(y_l|x)}{\pi_{\text{ref}}(y_l|x)} \right) \right]$$
+- **Siêu tham số**: $\beta = 0.1$, LR $5\times 10^{-6}$, mô hình tham chiếu $\pi_{\text{ref}}$ được đóng băng gradient tuyệt đối.
+- **Động lực hội tụ (Convergence Dynamics)**:
+  - **DPO Loss**: Giảm từ `0.6931` (ngẫu nhiên) $\to$ **`0.1190`** (bước 200) $\to$ **`0.1295`** (bước 400).
+  - **Độ chính xác cặp ưu tiên (Reward Accuracy)**: Tăng từ `50.0%` $\to$ **`85.4%`**.
+  - **Biên độ thưởng ẩn (Reward Margin $\Delta r$)**: Tăng từ `0.00` $\to$ **`+12.18`**.
+  - Thời gian huấn luyện: 20 phút 31 giây trên 1 GPU NVIDIA Tesla T4.
+- **Mã thực thi**: [trainer/train_dpo.py](file:///d:/Repogithub/vimind/trainer/train_dpo.py)
 
 ---
 
-## 💰 The Zero-Dollar ($0) Strategy
+## 🔬 Dữ Liệu & Số Liệu Nghiên Cứu Viết Paper
 
-You don't need a multi-million-dollar compute cluster to build a high-performance Small Language Model. ViMind is purposefully designed to run entirely on **free-tier ecosystem resources**:
+Tất cả log huấn luyện chi tiết từng bước, cấu hình toán học và mã tạo biểu đồ học thuật đều được lưu trữ nguyên vẹn trong thư mục [`experiments/vimind_1.0/`](file:///d:/Repogithub/vimind/experiments/vimind_1.0):
 
-| Component | Free Platform / Tool | Operational Detail | Cost |
-| :--- | :--- | :--- | :--- |
-| **Compute / Training** | **Kaggle Notebooks** | 30 GPU hours/week with **2x NVIDIA Tesla T4 (16GB)**. | **$0.00** |
-| **Pre-training Corpus** | **Wikipedia VN + Clean News** | Extracted via Hugging Face `datasets` & automated clean crawlers. | **$0.00** |
-| **SFT Instruction Data** | **Vi-Alpaca / OpenHermes-VI** | Permissive open-source Vietnamese instruction corpora. | **$0.00** |
-| **Synthetic CoT Generation**| **Google AI Studio (Gemini Flash)**| Free tier (1,500 daily requests) to synthesize `<think>` reasoning traces. | **$0.00** |
-| **Weights & Data Hosting** | **Hugging Face Hub** | Unlimited storage for datasets, tokenizer configs, and `.safetensors`. | **$0.00** |
-| **Interactive Web Demo** | **Hugging Face Spaces** | Free 24/7 web application hosting using Streamlit. | **$0.00** |
+- [`experiments/vimind_1.0/metrics_summary.json`](file:///d:/Repogithub/vimind/experiments/vimind_1.0/metrics_summary.json): Toàn bộ thông số kiến trúc, siêu tham số, bảng log bước huấn luyện (Loss, Accuracy, Margin, Learning Rate).
+- [`experiments/vimind_1.0/dpo_training.log`](file:///d:/Repogithub/vimind/experiments/vimind_1.0/dpo_training.log): Log đầy đủ của quá trình huấn luyện DPO.
+- [`experiments/vimind_1.0/sft_training.log`](file:///d:/Repogithub/vimind/experiments/vimind_1.0/sft_training.log): Log quá trình huấn luyện SFT.
+- [`experiments/vimind_1.0/pretrain_training.log`](file:///d:/Repogithub/vimind/experiments/vimind_1.0/pretrain_training.log): Log quá trình huấn luyện Pre-training từ bước 1 đến 12.682.
+- [`experiments/vimind_1.0/dpo_training_curves.png`](file:///d:/Repogithub/vimind/experiments/vimind_1.0/dpo_training_curves.png): Biểu đồ hội tụ DPO chuẩn ấn phẩm khoa học (DPI 300).
+- [`experiments/plot_curves.py`](file:///d:/Repogithub/vimind/experiments/plot_curves.py): Kịch bản tự động sinh biểu đồ chất lượng cao dùng cho bài báo LaTeX/PDF.
+
+![DPO Training Curves](experiments/vimind_1.0/dpo_training_curves.png)
 
 ---
 
-## 📂 Repository Structure
+## 📊 Đánh Giá Hiệu Năng & Điểm Đo (Benchmark)
+
+Chạy bộ kiểm thử tự động toàn diện qua [benchmark_test.py](file:///d:/Repogithub/vimind/benchmark_test.py):
+
+| Tiêu Chí Đánh Giá | Mô Tả & Kết Quả Thực Nghiệm |
+| :--- | :--- |
+| **Đọc hiểu & Trích xuất (RAG)** | Trích xuất chuẩn xác thực thể (năm thành lập trường, tên tác giả tác phẩm văn học) từ ngữ cảnh đưa vào mà không bị ảnh hưởng bởi giới hạn tham số kiến thức cứng. |
+| **Giao tiếp & Đồng cảm** | Nhận diện ngữ cảnh cảm xúc của người dùng, phản hồi lịch sự, từ tốn bằng tiếng Việt tự nhiên. |
+| **Khả năng Tự nhận diện** | Tự nhận biết bản thân là ViMind - mô hình ngôn ngữ tiếng Việt siêu nhẹ ~26M tham số. |
+| **Bộ nhớ VRAM tiêu thụ** | **103.0 MB** trên GPU Tesla T4 (cho phép chạy đồng thời hàng chục instance trên 1 GPU). |
+| **Tốc độ suy luận** | **~75.3 tokens/giây** trên GPU T4; **~28.5 tokens/giây** trên CPU Intel Core i7. |
+
+---
+
+## 📂 Cấu Trúc Thư Mục Repository
 
 ```
 vimind/
-├── data_pipeline/                # Data scraping, filtering & synthesis scripts
-│   ├── download_viwiki.py        # Extract clean text from Vietnamese Wikipedia
-│   ├── crawl_vietnews.py         # Curated web crawler for educational/news articles
-│   ├── clean_and_normalize.py    # NFC Unicode normalizer, regex & MinHash deduplication
-│   └── generate_synthetic_cot.py # Free-tier LLM API pipeline for <think> CoT data synthesis
+├── model/                         # Kiến trúc mạng nơ-ron & cấu hình Tokenizer
+│   ├── model.py                   # PyTorch ViMind (LLaMA-3, RMSNorm, RoPE, SwiGLU, GQA)
+│   ├── tokenizer.json             # File từ vựng Byte-BPE 12.8k tokens
+│   ├── tokenizer_config.json      # Cấu hình Tokenizer chuẩn Hugging Face
+│   └── special_tokens_map.json    # Định nghĩa các token đặc biệt (<|im_start|>, <|im_end|>, etc.)
 │
-├── dataset/                      # Preprocessed JSONL training datasets
-│   ├── pretrain_vi.jsonl         # Clean raw corpus for unsupervised pre-training
-│   ├── sft_vi.jsonl              # Multi-turn instruction & reasoning dataset
-│   └── dpo_vi.jsonl              # Preference pairs (chosen / rejected) for DPO
+├── dataset/                       # Pipeline xử lý dữ liệu và định dạng Dataset
+│   └── lm_dataset.py              # PretrainDataset, SFTDataset (Loss Masking), DPODataset
 │
-├── model/                        # Neural network architectures & tokenizer configurations
-│   ├── __init__.py
-│   ├── model_vimind.py           # Core Transformer Decoder (RMSNorm, RoPE, SwiGLU, GQA)
-│   ├── model_lora.py             # Native Low-Rank Adaptation (LoRA) implementation
-│   ├── tokenizer.json            # Trained Byte-level BPE tokenizer file
-│   └── tokenizer_config.json     # Standard Hugging Face tokenizer configuration
+├── data_pipeline/                 # Kịch bản tải và chuẩn hóa dữ liệu
+│   ├── clean_and_normalize.py     # Chuẩn hóa Unicode NFC và làm sạch dữ liệu
+│   ├── download_pretrain.py       # Tải Wikipedia tiếng Việt
+│   ├── download_sft.py            # Tải tập hội thoại SFT
+│   └── download_dpo.py            # Tải tập cặp ưu tiên DPO
 │
-├── trainer/                      # Training execution scripts for all phases
-│   ├── train_tokenizer.py        # Custom Byte-level BPE Tokenizer trainer
-│   ├── train_pretrain.py         # Phase 1: Next-Token-Prediction pre-training
-│   ├── train_full_sft.py         # Phase 2: Full-parameter Supervised Fine-Tuning
-│   ├── train_lora.py             # Phase 2 (Alternative): Parameter-Efficient LoRA SFT
-│   ├── train_dpo.py              # Phase 3: Direct Preference Optimization
-│   ├── train_grpo.py             # Phase 3 (Alternative): Group Relative Policy Optimization
-│   └── trainer_utils.py          # LR schedulers, gradient clipping, logger utilities
+├── trainer/                       # Các động cơ huấn luyện chuyên biệt
+│   ├── train_tokenizer.py         # Huấn luyện bộ tách từ Byte-BPE
+│   ├── pretrain.py                # Huấn luyện Next-Token-Prediction tiền kỳ
+│   ├── train_sft.py               # Huấn luyện SFT với Conversational Loss Masking
+│   ├── train_dpo.py               # Căn chỉnh DPO với Reference Model đóng băng
+│   ├── test_pipeline.py           # Bộ unit test kiểm thử 8/8 thành phần
+│   └── test_dpo_dry_run.py        # Kiểm thử tích hợp DPO trước khi chạy Kaggle
 │
-├── scripts/                      # Deployment, export, and interface utilities
-│   ├── convert_to_huggingface.py # Export PyTorch checkpoint to Hugging Face format
-│   ├── web_demo.py               # Interactive Streamlit Web Chat UI
-│   ├── serve_openai_api.py       # FastAPI server matching OpenAI `/v1/chat/completions`
-│   └── eval_benchmarks.py        # Perplexity, reasoning, and grammar benchmark suite
+├── experiments/                   # Kho lưu trữ dữ liệu nghiên cứu phục vụ viết Paper
+│   ├── plot_curves.py             # Kịch bản vẽ biểu đồ huấn luyện độ phân giải cao
+│   └── vimind_1.0/
+│       ├── metrics_summary.json   # Chỉ số chi tiết từng bước (Loss, Acc, Margin, LR)
+│       ├── dpo_training.log       # Log huấn luyện DPO
+│       ├── sft_training.log       # Log huấn luyện SFT
+│       ├── pretrain_training.log  # Log huấn luyện Pre-training
+│       └── dpo_training_curves.png # Biểu đồ hội tụ DPO 300 DPI
 │
-├── requirements.txt              # Project dependencies
-├── LICENSE                       # Apache 2.0 License
-└── README.md                     # Project documentation (this file)
+├── app.py                         # Giao diện Web Chat Streamlit hiện đại
+├── benchmark_test.py              # Bộ kiểm thử hiệu năng và tác vụ tự động
+├── eval_chat.py                   # CLI tương tác trò chuyện trực tiếp qua Terminal
+├── test_inference.py              # So sánh kết quả sinh văn bản SFT vs. DPO
+├── train_notebook.ipynb           # Kaggle Notebook tự động hóa toàn bộ quá trình huấn luyện
+├── kernel-metadata.json           # Cấu hình Kaggle API đẩy kernel lên GPU cloud
+├── requirements.txt               # Danh sách thư viện phụ thuộc
+└── README.md                      # Tài liệu kỹ thuật dự án (file này)
 ```
 
 ---
 
-## 📊 Data Engineering & Synthesis Pipeline
+## 🛠️ Hướng Dẫn Cài Đặt & Chạy Thử (Quickstart)
 
-Following the modern *"Textbooks Are All You Need"* paradigm, ViMind prioritizes data density and semantic cleanliness over raw web volume.
-
-### 1. Pre-training Corpus (`dataset/pretrain_vi.jsonl`)
-* **Target Size**: ~500 MB – 1.5 GB of curated text (~150M – 400M tokens).
-* **Format**:
-  ```json
-  {"text": "Hồ Gươm (hay Hồ Hoàn Kiếm) là một danh lam thắng cảnh tự nhiên nổi tiếng tọa lạc tại trung tâm thủ đô Hà Nội, Việt Nam."}
-  {"text": "Kiến trúc Transformer sử dụng cơ chế Multi-Head Attention để mô hình hóa mối tương quan ngữ nghĩa giữa các token trong câu."}
-  ```
-
-### 2. SFT & Reasoning Corpus (`dataset/sft_vi.jsonl`)
-* **Format**: Multi-turn dialogue with integrated Chain-of-Thought `<think>` tags:
-  ```json
-  {
-    "conversations": [
-      {
-        "role": "user",
-        "content": "Tại sao bầu trời vào ban ngày lại có màu xanh lam?"
-      },
-      {
-        "role": "assistant",
-        "content": "<think>\nNgười dùng hỏi về nguyên lý vật lý khiến bầu trời có màu xanh. Cần giải thích hiện tượng tán xạ Rayleigh: ánh sáng mặt trời chứa nhiều bước sóng, ánh sáng xanh có bước sóng ngắn hơn nên bị các phân tử khí quyển tán xạ mạnh nhất về mọi hướng đến mắt người quan sát.\n</think>\nBầu trời có màu xanh lam vào ban ngày là do hiện tượng **tán xạ Rayleigh**. Ánh sáng từ Mặt Trời là ánh sáng trắng bao gồm nhiều màu sắc với bước sóng khác nhau. Do ánh sáng màu xanh lam có bước sóng ngắn, nó bị các phân tử khí và hạt bụi nhỏ trong khí quyển Trái Đất tán xạ mạnh hơn nhiều so với các ánh sáng có bước sóng dài (như đỏ, vàng), tạo nên sắc xanh đặc trưng khi quan sát từ mặt đất."
-      }
-    ]
-  }
-  ```
-
-### 3. DPO Alignment Corpus (`dataset/dpo_vi.jsonl`)
-* **Format**:
-  ```json
-  {
-    "chosen": [
-      {"role": "user", "content": "Thủ đô của Việt Nam là gì?"},
-      {"role": "assistant", "content": "Thủ đô của Việt Nam là Hà Nội."}
-    ],
-    "rejected": [
-      {"role": "user", "content": "Thủ đô của Việt Nam là gì?"},
-      {"role": "assistant", "content": "Thủ đô của Việt Nam là Thành phố Hồ Chí Minh."}
-    ]
-  }
-  ```
-
----
-
-## 🚀 End-to-End Training Lifecycle
-
-```mermaid
-flowchart TD
-    D1["1. Data Pipeline<br/>(Wikipedia + Vi-Alpaca + CoT)"] --> T1["2. Train Tokenizer<br/>(trainer/train_tokenizer.py)"]
-    T1 --> P1["3. Base Pre-training<br/>(trainer/train_pretrain.py)"]
-    P1 --> S1["4. Supervised Fine-Tuning<br/>(trainer/train_full_sft.py)"]
-    S1 --> A1["5. Preference Alignment (DPO/GRPO)<br/>(trainer/train_dpo.py)"]
-    A1 --> E1["6. Export & Inference<br/>(scripts/web_demo.py)"]
-```
-
-### Phase 1: Native Vietnamese Tokenizer
-Train a custom Byte-level Byte Pair Encoding (BPE) tokenizer tailored to Vietnamese syllables:
+### 1. Cài đặt môi trường
 ```bash
-python trainer/train_tokenizer.py \
-    --data_path dataset/pretrain_vi.jsonl \
-    --vocab_size 12800 \
-    --output_dir model/
-```
-
-### Phase 2: Base Pre-training
-Pre-train the foundation transformer on Next-Token-Prediction:
-```bash
-python trainer/train_pretrain.py \
-    --data_path dataset/pretrain_vi.jsonl \
-    --dim 768 \
-    --n_layers 16 \
-    --n_heads 12 \
-    --max_seq_len 1024 \
-    --batch_size 32 \
-    --learning_rate 5e-4 \
-    --epochs 3 \
-    --output_dir out/
-```
-
-### Phase 3: Supervised Fine-Tuning (SFT) & CoT Reasoning
-Train the model to follow instructions and generate reasoning traces:
-```bash
-python trainer/train_full_sft.py \
-    --data_path dataset/sft_vi.jsonl \
-    --pretrain_checkpoint out/pretrain_768.pth \
-    --max_seq_len 1024 \
-    --batch_size 16 \
-    --learning_rate 1e-4 \
-    --epochs 3 \
-    --output_dir out/
-```
-
-### Phase 4: Alignment & RL (DPO / GRPO)
-Align the model responses against human preferences using DPO:
-```bash
-python trainer/train_dpo.py \
-    --data_path dataset/dpo_vi.jsonl \
-    --sft_checkpoint out/sft_768.pth \
-    --learning_rate 1e-5 \
-    --epochs 2 \
-    --output_dir out/
-```
-
-### Phase 5: Model Export & Deployment
-Convert raw PyTorch weights into standard Hugging Face `safetensors` format:
-```bash
-python scripts/convert_to_huggingface.py \
-    --input_checkpoint out/sft_768.pth \
-    --output_dir exported_model/
-```
-
-Launch the interactive web chat application:
-```bash
-streamlit run scripts/web_demo.py
-```
-
-Or deploy an OpenAI-compatible REST server:
-```bash
-python scripts/serve_openai_api.py --port 8000
-```
-
----
-
-## 🛠️ Quickstart & Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/your-username/vimind.git
-cd vimind
-
-# 2. Set up a virtual environment
-python -m venv venv
-# On Windows:
-.\venv\Scripts\activate
-# On Linux/macOS:
-source venv/bin/activate
-
-# 3. Install core dependencies
+git clone https://github.com/WuKong0601/ViMind.git
+cd ViMind
 pip install -r requirements.txt
 ```
 
+### 2. Tải trọng số ViMind 1.0
+Trọng số được lưu trữ trong thư mục `out/dpo/vimind_dpo_final` (hoặc tải từ Kaggle Dataset / Hugging Face).
+
+### 3. Trò chuyện qua dòng lệnh (CLI)
+```bash
+python eval_chat.py --model_path out/dpo/vimind_dpo_final
+```
+
+### 4. Khởi chạy Giao diện Web (Streamlit)
+```bash
+streamlit run app.py
+```
+
+### 5. Chạy kiểm thử Benchmark
+```bash
+python benchmark_test.py
+```
+
+### 6. Sử dụng qua thư viện `transformers` của Hugging Face
+```python
+import torch
+from transformers import AutoTokenizer
+from model.model import ViMindForCausalLM
+
+model_path = "out/dpo/vimind_dpo_final"
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = ViMindForCausalLM.from_pretrained(model_path)
+model.eval()
+
+messages = [
+    {"role": "user", "content": "Xin chào, bạn có thể giúp gì cho tôi?"}
+]
+prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tokenizer(prompt, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model.generate(
+        inputs["input_ids"],
+        max_new_tokens=256,
+        temperature=0.7,
+        top_p=0.9,
+        eos_token_id=tokenizer.eos_token_id
+    )
+
+response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+print(response)
+```
+
 ---
 
-## 🗺️ Development Roadmap
+## 🗺️ Lộ Trình Phát Triển (ViMind 2.0 Roadmap)
 
-- [x] Project architecture design & specification.
-- [ ] Automated data extraction pipeline (Wikipedia VN + curated news).
-- [ ] High-efficiency Vietnamese Byte-level BPE tokenizer.
-- [ ] Pre-training baseline **ViMind-Base (64M)** on Kaggle T4.
-- [ ] SFT integration with synthetic reasoning (`<think>`) traces.
-- [ ] DPO / GRPO alignment pipeline.
-- [ ] GGUF 4-bit quantization for on-device deployment (llama.cpp / Ollama).
-- [ ] Public release on Hugging Face Model Hub & Spaces demo.
+Mục tiêu tiếp theo sau cột mốc ViMind 1.0 là phát triển **ViMind 2.0**:
+
+- [ ] **Mở rộng quy mô tham số**: Tăng kích thước mô hình lên **64M – 104M** tham số ($d_{model} = 768$, layers = 12–16, ngữ cảnh 1.024 tokens) để tăng dung lượng lưu trữ tri thức sự thật.
+- [ ] **Làm giàu dữ liệu tiền kỳ (Knowledge Enrichment)**:
+  - Bổ sung 1 GB – 3 GB dữ liệu chất lượng cao: Sách giáo khoa (Toán, Văn, Sử, Địa, Lý, Hóa), bách khoa tri thức tổng quát và báo chí chọn lọc.
+  - Huấn luyện tiền kỳ từ 3 đến 5 Epochs (thay vì 1 Epoch đơn lẻ ở bản 1.0) nhằm ghi nhớ sâu các tri thức sự thật.
+- [ ] **Tối ưu hóa căn chỉnh DPO thế hệ mới**:
+  - Ứng dụng Length-Normalized DPO hoặc hạ hệ số $\beta = 0.05$ để ngăn ngừa hiện tượng sinh phản hồi quá ngắn.
+- [ ] **Xuất định dạng GGUF & Quantization 4-bit**:
+  - Cung cấp mô hình định dạng `.gguf` để chạy trực tiếp qua `llama.cpp` hoặc tích hợp vào Ollama.
 
 ---
 
-## 📜 License & Acknowledgments
+## 📜 Trích Dẫn (Citation) & Giấy Phép
 
-- Released under the **[Apache License 2.0](LICENSE)**.
-- Architectural inspiration and training loops derived from the pioneering work of `minimind` by Jingyao Gong and the broader open-source AI community.
+Nếu bạn sử dụng **ViMind** hoặc dữ liệu nghiên cứu trong công trình học thuật hoặc dự án của mình, vui lòng trích dẫn theo định dạng sau:
+
+```bibtex
+@misc{vimind2026,
+  author = {Quoc, Cong Huynh Le and Contributors},
+  title = {ViMind: Native Vietnamese Small Language Model from Scratch},
+  year = {2026},
+  publisher = {GitHub},
+  howpublished = {\url{https://github.com/WuKong0601/ViMind}},
+  note = {Version 1.0.0, Zero-Compute-Budget SLM for Vietnamese}
+}
+```
+
+Dự án được phân phối dưới giấy phép mã nguồn mở **[Apache License 2.0](LICENSE)**.

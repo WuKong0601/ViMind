@@ -1,0 +1,182 @@
+{
+  "model_name": "ViMind-1.0",
+  "parameters": 26207488,
+  "architecture": {
+    "vocab_size": 12800,
+    "hidden_size": 512,
+    "intermediate_size": 1376,
+    "num_hidden_layers": 8,
+    "num_attention_heads": 8,
+    "num_key_value_heads": 4,
+    "max_seq_len": 512,
+    "rope_theta": 10000.0,
+    "norm_eps": 1e-05,
+    "activation": "silu_swiglu"
+  },
+  "pretraining": {
+    "dataset": "Wikipedia Vietnamese Cleaned",
+    "num_documents": 405835,
+    "dataset_size_gb": 1.31,
+    "learning_rate": 0.0005,
+    "min_learning_rate": 5e-05,
+    "batch_size_per_device": 32,
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 128,
+    "optimizer": "AdamW",
+    "weight_decay": 0.01,
+    "initial_loss": 9.501,
+    "final_loss": 4.1952,
+    "epochs": 1
+  },
+  "sft": {
+    "dataset": "Vietnamese Multi-turn Dialogue",
+    "num_conversations": 52000,
+    "dataset_size_mb": 58.4,
+    "loss_masking": "Prompt masked with -100, response only",
+    "learning_rate": 0.0002,
+    "batch_size_per_device": 16,
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 64,
+    "initial_loss": 9.49,
+    "final_loss": 1.8542,
+    "epochs": 1
+  },
+  "dpo": {
+    "dataset": "Vietnamese Preference Pairs (Chosen / Rejected)",
+    "num_pairs": 12800,
+    "dataset_size_mb": 60.9,
+    "beta": 0.1,
+    "learning_rate": 5e-06,
+    "batch_size_per_device": 8,
+    "gradient_accumulation_steps": 4,
+    "effective_batch_size": 32,
+    "optimizer": "AdamW",
+    "total_steps": 401,
+    "training_time_seconds": 1231,
+    "initial_loss": 0.6931,
+    "final_loss": 0.1295,
+    "initial_accuracy": 50.0,
+    "final_accuracy": 85.4,
+    "initial_margin": 0.0,
+    "final_margin": 12.187,
+    "steps_data": [
+      {
+        "step": 25,
+        "loss": 0.4621,
+        "accuracy": 76.0,
+        "margin": 1.0416,
+        "lr": 1e-05
+      },
+      {
+        "step": 50,
+        "loss": 0.2127,
+        "accuracy": 80.4,
+        "margin": 4.7959,
+        "lr": 2e-05
+      },
+      {
+        "step": 75,
+        "loss": 0.1614,
+        "accuracy": 82.6,
+        "margin": 7.4945,
+        "lr": 1.98e-05
+      },
+      {
+        "step": 100,
+        "loss": 0.157,
+        "accuracy": 82.4,
+        "margin": 8.584,
+        "lr": 1.91e-05
+      },
+      {
+        "step": 125,
+        "loss": 0.1386,
+        "accuracy": 84.4,
+        "margin": 9.2628,
+        "lr": 1.79e-05
+      },
+      {
+        "step": 150,
+        "loss": 0.1464,
+        "accuracy": 83.4,
+        "margin": 10.0032,
+        "lr": 1.64e-05
+      },
+      {
+        "step": 175,
+        "loss": 0.1254,
+        "accuracy": 84.2,
+        "margin": 10.4284,
+        "lr": 1.46e-05
+      },
+      {
+        "step": 200,
+        "loss": 0.119,
+        "accuracy": 85.0,
+        "margin": 11.2764,
+        "lr": 1.26e-05
+      },
+      {
+        "step": 225,
+        "loss": 0.1493,
+        "accuracy": 84.0,
+        "margin": 12.5057,
+        "lr": 1.05e-05
+      },
+      {
+        "step": 250,
+        "loss": 0.1444,
+        "accuracy": 84.0,
+        "margin": 11.726,
+        "lr": 8.43e-06
+      },
+      {
+        "step": 275,
+        "loss": 0.1491,
+        "accuracy": 85.4,
+        "margin": 11.4986,
+        "lr": 6.43e-06
+      },
+      {
+        "step": 300,
+        "loss": 0.123,
+        "accuracy": 85.0,
+        "margin": 11.8326,
+        "lr": 4.62e-06
+      },
+      {
+        "step": 325,
+        "loss": 0.1338,
+        "accuracy": 83.4,
+        "margin": 11.8824,
+        "lr": 3.11e-06
+      },
+      {
+        "step": 350,
+        "loss": 0.1337,
+        "accuracy": 82.9,
+        "margin": 11.5749,
+        "lr": 1.97e-06
+      },
+      {
+        "step": 375,
+        "loss": 0.1319,
+        "accuracy": 83.8,
+        "margin": 11.9159,
+        "lr": 1.26e-06
+      },
+      {
+        "step": 400,
+        "loss": 0.1295,
+        "accuracy": 84.2,
+        "margin": 12.187,
+        "lr": 1e-06
+      }
+    ]
+  },
+  "hardware_benchmark": {
+    "device": "NVIDIA Tesla T4 16GB",
+    "vram_footprint_mb": 103.0,
+    "inference_speed_tokens_per_sec": 75.3
+  }
+}

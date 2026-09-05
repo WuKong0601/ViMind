@@ -16,8 +16,8 @@ from model.model import ViMindForCausalLM
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-ckpt_1000 = "kaggle_outputs_v10/vimind/out/sft/vimind_sft_step_1000"
-ckpt_final = "out/sft/vimind_sft_final"
+ckpt_sft = "out/sft/vimind_sft_final"
+ckpt_dpo = "out/dpo/vimind_dpo_final"
 
 tokenizer = AutoTokenizer.from_pretrained("model")
 
@@ -27,7 +27,7 @@ test_prompts = [
     "Học máy là gì?"
 ]
 
-for ckpt_path, label in [(ckpt_1000, "STEP 1000"), (ckpt_final, "FINAL")]:
+for ckpt_path, label in [(ckpt_sft, "SFT FINAL"), (ckpt_dpo, "VIMIND 1.0 (DPO FINAL)")]:
     if not os.path.exists(ckpt_path):
         print(f"Skipping {label}, path not found: {ckpt_path}")
         continue
