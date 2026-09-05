@@ -95,9 +95,12 @@ class SFTDataset(Dataset):
         sample = self.samples[index]
         conversations = sample.get("conversations", [])
 
-        # Format conversation via chat template
-        full_text = self.tokenizer.apply_chat_template(conversations, tokenize=False)
-        input_ids = self.tokenizer(full_text, add_special_tokens=False).input_ids[: self.max_length]
+        # Tokenize and keep the most recent conversation tokens (tail) if exceeding max_length
+        tokenized = self.tokenizer(full_text, add_special_tokens=False).input_ids
+        if len(tokenized) > self.max_length:
+            input_ids = tokenized[-self.max_length :]
+        else:
+            input_ids = tokenized
 
         labels = self._generate_labels(input_ids)
 

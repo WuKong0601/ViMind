@@ -365,11 +365,15 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-            loss = F.cross_entropy(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
-                ignore_index=-100,
-            )
+            valid_tokens = (shift_labels != -100).sum()
+            if valid_tokens == 0:
+                loss = torch.tensor(0.0, device=logits.device, requires_grad=True)
+            else:
+                loss = F.cross_entropy(
+                    shift_logits.view(-1, shift_logits.size(-1)),
+                    shift_labels.view(-1),
+                    ignore_index=-100,
+                )
 
         return CausalLMOutputWithPast(
             loss=loss,

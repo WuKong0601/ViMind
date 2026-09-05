@@ -197,7 +197,11 @@ def train_sft(args):
             # Forward pass
             with autocast_ctx:
                 outputs = model(input_ids, labels=labels)
-                loss = outputs.loss / args.accumulation_steps
+                raw_loss = outputs.loss
+                if raw_loss is None or torch.isnan(raw_loss) or torch.isinf(raw_loss):
+                    optimizer.zero_grad(set_to_none=True)
+                    continue
+                loss = raw_loss / args.accumulation_steps
 
             # Backward pass
             if use_scaler:
@@ -205,7 +209,7 @@ def train_sft(args):
             else:
                 loss.backward()
 
-            running_loss += loss.item() * args.accumulation_steps
+            running_loss += raw_loss.item()
 
             # Gradient accumulation step
             if step % args.accumulation_steps == 0 or step == num_batches_per_epoch:
