@@ -95,14 +95,17 @@ class SFTDataset(Dataset):
         sample = self.samples[index]
         conversations = sample.get("conversations", [])
 
-        # Tokenize and keep the most recent conversation tokens (tail) if exceeding max_length
-        tokenized = self.tokenizer(full_text, add_special_tokens=False).input_ids
-        if len(tokenized) > self.max_length:
-            input_ids = tokenized[-self.max_length :]
-        else:
-            input_ids = tokenized
+        # Format conversation via chat template
+        full_text = self.tokenizer.apply_chat_template(conversations, tokenize=False)
+
+        # Tokenize and truncate to max_length (keeping prompt and beginning of response)
+        input_ids = self.tokenizer(full_text, add_special_tokens=False).input_ids[: self.max_length]
 
         labels = self._generate_labels(input_ids)
+
+        # Safety fallback: if no assistant tokens were found within max_length, treat as standard autoregressive
+        if not any(lbl != -100 for lbl in labels):
+            labels = list(input_ids)
 
         # Padding
         padding_len = self.max_length - len(input_ids)
