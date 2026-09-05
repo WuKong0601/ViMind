@@ -13,7 +13,8 @@
     "gpu"
   ],
   "dataset_sources": [
-    "cnghunhlquc/vimind-pretrained-base"
+    "cnghunhlquc/vimind-pretrained-base",
+    "cnghunhlquc/vimind-sft-checkpoint"
   ],
   "kernel_sources": [],
   "competition_sources": [],
