@@ -43,4 +43,5 @@ wandb/
 swanlab/
 
 kaggle_outputs/
+kaggle_outputs_sft/
 kaggle_logs/

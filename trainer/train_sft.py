@@ -199,6 +199,8 @@ def train_sft(args):
                 outputs = model(input_ids, labels=labels)
                 raw_loss = outputs.loss
                 if raw_loss is None or torch.isnan(raw_loss) or torch.isinf(raw_loss):
+                    if global_step % 50 == 0:
+                        print(f"⚠️ Step {global_step}: raw_loss is {raw_loss}, skipping update", flush=True)
                     optimizer.zero_grad(set_to_none=True)
                     continue
                 loss = raw_loss / args.accumulation_steps
@@ -239,7 +241,8 @@ def train_sft(args):
                 print(
                     f"[{percent:5.1f}%] SFT [{epoch}/{args.epochs}] Step [{step}/{num_batches_per_epoch}] "
                     f"| Loss: {avg_loss:.4f} (PPL: {ppl:.1f}) | LR: {lr:.2e} "
-                    f"| Speed: {speed:.1f} it/s | ETA: {format_time(eta_seconds)}"
+                    f"| Speed: {speed:.1f} it/s | ETA: {format_time(eta_seconds)}",
+                    flush=True
                 )
                 running_loss = 0.0
                 interval_start_time = time.time()

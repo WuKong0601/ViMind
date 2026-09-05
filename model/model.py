@@ -370,7 +370,7 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
                 loss = torch.tensor(0.0, device=logits.device, requires_grad=True)
             else:
                 loss = F.cross_entropy(
-                    shift_logits.view(-1, shift_logits.size(-1)),
+                    shift_logits.view(-1, shift_logits.size(-1)).float(),
                     shift_labels.view(-1),
                     ignore_index=-100,
                 )
