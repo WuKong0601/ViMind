@@ -346,8 +346,8 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def tie_weights(self):
-        super().tie_weights()
+    def tie_weights(self, *args, **kwargs):
+        super().tie_weights(*args, **kwargs)
         if getattr(self.config, "tie_word_embeddings", True):
             self.lm_head.weight = self.model.embed_tokens.weight
 
