@@ -270,6 +270,16 @@ class ViMindModel(nn.Module):
         self.register_buffer("freqs_cos", freqs_cos, persistent=False)
         self.register_buffer("freqs_sin", freqs_sin, persistent=False)
 
+    def _init_rope(self, device: torch.device):
+        """Recomputes RoPE tables on the target device to guarantee finite, valid tables."""
+        freqs_cos, freqs_sin = precompute_freqs_cis(
+            dim=self.config.head_dim,
+            end=self.config.max_position_embeddings,
+            theta=self.config.rope_theta,
+        )
+        self.freqs_cos = freqs_cos.to(device)
+        self.freqs_sin = freqs_sin.to(device)
+
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -285,10 +295,17 @@ class ViMindModel(nn.Module):
         # Embedding lookup
         hidden_states = self.dropout(self.embed_tokens(input_ids))
 
-        # Recompute RoPE if device changed
-        if self.freqs_cos.device != hidden_states.device:
-            self.freqs_cos = self.freqs_cos.to(hidden_states.device)
-            self.freqs_sin = self.freqs_sin.to(hidden_states.device)
+        # Robust self-healing RoPE tables: guarantee valid, non-meta, non-zero values on correct device
+        if (
+            not hasattr(self, "freqs_cos")
+            or self.freqs_cos is None
+            or self.freqs_cos.device != hidden_states.device
+            or self.freqs_cos.device.type == "meta"
+            or self.freqs_cos.numel() == 0
+            or self.freqs_cos[0, 0] != 1.0
+            or torch.isnan(self.freqs_cos[0, 0])
+        ):
+            self._init_rope(hidden_states.device)
 
         position_embeddings = (
             self.freqs_cos[start_pos : start_pos + seq_len],
@@ -315,7 +332,7 @@ class ViMindModel(nn.Module):
 # ==============================================================================
 class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
     config_class = ViMindConfig
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Optional[ViMindConfig] = None):
         config = config or ViMindConfig()
@@ -328,6 +345,11 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             self.lm_head.weight = self.model.embed_tokens.weight
 
         self.post_init()
+
+    def tie_weights(self):
+        super().tie_weights()
+        if getattr(self.config, "tie_word_embeddings", True):
+            self.lm_head.weight = self.model.embed_tokens.weight
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

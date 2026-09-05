@@ -84,18 +84,16 @@ def train_sft(args):
     if args.dtype == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
         amp_dtype = torch.bfloat16
         use_scaler = False
+        autocast_ctx = torch.amp.autocast(device_type=device_type, dtype=amp_dtype)
     elif args.dtype == "float16" and "cuda" in args.device:
         amp_dtype = torch.float16
         use_scaler = True
+        autocast_ctx = torch.amp.autocast(device_type=device_type, dtype=amp_dtype)
     else:
         amp_dtype = torch.float32
         use_scaler = False
+        autocast_ctx = nullcontext()
 
-    autocast_ctx = (
-        torch.amp.autocast(device_type=device_type, dtype=amp_dtype)
-        if device_type == "cuda"
-        else nullcontext()
-    )
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
 
     print("=" * 70)
@@ -118,6 +116,8 @@ def train_sft(args):
         print(f"      Loading weights from pre-trained checkpoint: {args.from_pretrained}")
         model = ViMindForCausalLM.from_pretrained(args.from_pretrained)
         config = model.config
+        if getattr(config, "tie_word_embeddings", True):
+            model.lm_head.weight = model.model.embed_tokens.weight
     else:
         print(f"      Training SFT directly from fresh architecture (~26.2M)...")
         config = ViMindConfig(
@@ -136,6 +136,8 @@ def train_sft(args):
     print(f"      Total Parameters: {total_params:,} ({total_params/1e6:.2f}M)")
 
     model = model.to(device)
+    if hasattr(model.model, "_init_rope"):
+        model.model._init_rope(device)
     model.train()
 
     # 3. Load SFT Dataset & DataLoader
@@ -165,6 +167,18 @@ def train_sft(args):
         weight_decay=args.weight_decay,
         learning_rate=args.learning_rate,
     )
+
+    # Pre-flight sanity check on 1 batch
+    model.eval()
+    with torch.no_grad():
+        test_in, test_tgt = next(iter(sft_loader))
+        test_in = test_in[:2].to(device)
+        test_tgt = test_tgt[:2].to(device)
+        with autocast_ctx:
+            test_out = model(test_in, labels=test_tgt)
+        print(f"      Pre-flight validation loss: {test_out.loss.item():.4f}")
+        assert not (torch.isnan(test_out.loss) or torch.isinf(test_out.loss)), "Pre-flight validation produced NaN/Inf loss!"
+    model.train()
 
     # 5. Training Loop
     print(f"[5/5] Commencing SFT training loop for {args.epochs} epoch(s)...")
