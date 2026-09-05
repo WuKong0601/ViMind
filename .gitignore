@@ -41,3 +41,5 @@ data_pipeline/processed/
 *.log
 wandb/
 swanlab/
+
+kaggle_outputs/
