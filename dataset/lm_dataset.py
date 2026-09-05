@@ -114,3 +114,67 @@ class SFTDataset(Dataset):
             labels = labels + [-100] * padding_len
 
         return torch.tensor(input_ids, dtype=torch.long), torch.tensor(labels, dtype=torch.long)
+
+
+class DPODataset(Dataset):
+    """
+    Dataset for Direct Preference Optimization (DPO) on pair-wise preference data.
+    Each sample contains 'chosen' and 'rejected' conversation turns.
+    Applies Loss Masking so log probabilities are computed only on the assistant's responses.
+    """
+
+    def __init__(self, data_path: str, tokenizer, max_length: int = 512):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.samples = load_dataset("json", data_files=data_path, split="train")
+        self.bos_asst_ids = tokenizer("<s>assistant\n", add_special_tokens=False).input_ids
+        self.eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 2
+        self.pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
+
+    def __len__(self):
+        return len(self.samples)
+
+    def _generate_labels(self, input_ids: list) -> list:
+        labels = [-100] * len(input_ids)
+        asst_len = len(self.bos_asst_ids)
+        i = 0
+        while i <= len(input_ids) - asst_len:
+            if input_ids[i : i + asst_len] == self.bos_asst_ids:
+                start = i + asst_len
+                end = start
+                while end < len(input_ids) and input_ids[end] != self.eos_id:
+                    end += 1
+                if end < len(input_ids):
+                    end += 1
+                for j in range(start, min(end, len(input_ids))):
+                    labels[j] = input_ids[j]
+                i = end
+            else:
+                i += 1
+        return labels
+
+    def _process_item(self, conversations: list):
+        full_text = self.tokenizer.apply_chat_template(conversations, tokenize=False)
+        input_ids = self.tokenizer(full_text, add_special_tokens=False).input_ids[: self.max_length]
+        labels = self._generate_labels(input_ids)
+
+        if not any(lbl != -100 for lbl in labels):
+            labels = list(input_ids)
+
+        padding_len = self.max_length - len(input_ids)
+        if padding_len > 0:
+            input_ids = input_ids + [self.pad_id] * padding_len
+            labels = labels + [-100] * padding_len
+
+        return torch.tensor(input_ids, dtype=torch.long), torch.tensor(labels, dtype=torch.long)
+
+    def __getitem__(self, index):
+        sample = self.samples[index]
+        chosen_conv = sample.get("chosen", [])
+        rejected_conv = sample.get("rejected", [])
+
+        chosen_input_ids, chosen_labels = self._process_item(chosen_conv)
+        rejected_input_ids, rejected_labels = self._process_item(rejected_conv)
+
+        return chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels

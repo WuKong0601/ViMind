@@ -16,8 +16,8 @@ from model.model import ViMindForCausalLM
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-ckpt_1000 = "kaggle_outputs/vimind/out/sft/vimind_sft_step_1000"
-ckpt_final = "kaggle_outputs/vimind/out/sft/vimind_sft_final"
+ckpt_1000 = "kaggle_outputs_v10/vimind/out/sft/vimind_sft_step_1000"
+ckpt_final = "out/sft/vimind_sft_final"
 
 tokenizer = AutoTokenizer.from_pretrained("model")
 

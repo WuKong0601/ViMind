@@ -224,8 +224,39 @@ def run_pipeline_test():
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+    # -------------------------------------------------------------
+    # Test 8: DPO Preference Loss & Policy Optimization
+    # -------------------------------------------------------------
+    log_test(8, "DPO Preference Loss & Policy Optimization")
+    from trainer.train_dpo import compute_logps, dpo_loss
+
+    c_ids = torch.randint(10, 1000, (2, 32), device=device)
+    c_lbl = c_ids.clone()
+    c_lbl[:, :16] = -100
+
+    r_ids = torch.randint(10, 1000, (2, 32), device=device)
+    r_lbl = r_ids.clone()
+    r_lbl[:, :16] = -100
+
+    ref_model = ViMindForCausalLM(config).to(device)
+    ref_model.eval()
+    for p in ref_model.parameters():
+        p.requires_grad = False
+
+    p_c_logps = compute_logps(model, c_ids, c_lbl)
+    p_r_logps = compute_logps(model, r_ids, r_lbl)
+    with torch.no_grad():
+        r_c_logps = compute_logps(ref_model, c_ids, c_lbl)
+        r_r_logps = compute_logps(ref_model, r_ids, r_lbl)
+
+    dpo_l, c_rew, r_rew, acc, margin = dpo_loss(p_c_logps, p_r_logps, r_c_logps, r_r_logps, beta=0.1)
+    assert not (torch.isnan(dpo_l) or torch.isinf(dpo_l)), "DPO loss is NaN or Inf!"
+    dpo_l.backward()
+    print(f"DPO Test Loss: {dpo_l.item():.4f} | Margin: {margin.item():+.4f}")
+    print("✅ DPO preference loss and backward pass verified successfully!")
+
     print("\n" + "=" * 65)
-    print("🎉 ALL 7 PIPELINE TESTS PASSED WITH ZERO ERRORS!")
+    print("🎉 ALL 8 PIPELINE TESTS PASSED WITH ZERO ERRORS!")
     print("=" * 65)
     return True
 
