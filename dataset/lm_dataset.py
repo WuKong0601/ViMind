@@ -178,3 +178,50 @@ class DPODataset(Dataset):
         rejected_input_ids, rejected_labels = self._process_item(rejected_conv)
 
         return chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels
+
+
+class RLAIFDataset(Dataset):
+    """
+    Dataset for Reinforcement Learning / GRPO training.
+    Provides formatted prompts for rollout exploration with optional Chain-of-Thought (<think>) prefixing.
+    """
+
+    def __init__(self, data_path: str, tokenizer, max_length: int = 512, thinking_ratio: float = 0.5):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.thinking_ratio = thinking_ratio
+        self.samples = load_dataset("json", data_files=data_path, split="train")
+
+    def __len__(self):
+        return len(self.samples)
+
+    def _create_prompt(self, sample: dict) -> str:
+        if "conversations" in sample:
+            conv = sample["conversations"]
+            # Exclude last assistant message if present so model generates it
+            if len(conv) > 0 and conv[-1].get("role") == "assistant":
+                prompt_conv = conv[:-1]
+            else:
+                prompt_conv = conv
+
+            prompt = self.tokenizer.apply_chat_template(
+                prompt_conv, tokenize=False, add_generation_prompt=True
+            )
+        elif "prompt" in sample:
+            prompt = str(sample["prompt"])
+        else:
+            prompt = str(sample.get("text", ""))
+
+        import random
+        if self.thinking_ratio > 0 and random.random() < self.thinking_ratio:
+            if not prompt.endswith("<think>\n") and not prompt.endswith("<think>"):
+                prompt = prompt + "<think>\n"
+
+        return prompt
+
+    def __getitem__(self, index):
+        sample = self.samples[index]
+        prompt = self._create_prompt(sample)
+        gt = sample.get("ground_truth", sample.get("answer", ""))
+        return {"prompt": prompt, "ground_truth": str(gt)}
