@@ -48,8 +48,15 @@ def load_model_and_tokenizer(args):
 
 
 def main():
+    candidates = [
+        "out/dpo/vimind_64m_dpo_final",
+        "out/vimind_64m_dpo_final",
+        "out/sft/vimind_64m_sft_final",
+        "out/vimind_64m_final",
+    ]
+    default_model = next((p for p in candidates if os.path.exists(p)), "out/dpo/vimind_64m_dpo_final")
     parser = argparse.ArgumentParser(description="ViMind Model Evaluation & Interactive Inference")
-    parser.add_argument("--model_path", default="out/vimind_64m_final", type=str, help="Path to model directory")
+    parser.add_argument("--model_path", default=default_model, type=str, help="Path to model directory")
     parser.add_argument("--tokenizer_dir", default="model", type=str, help="Path to tokenizer directory")
     parser.add_argument("--lora_path", default="None", type=str, help="Path to LoRA adapter weights (.pth)")
     parser.add_argument("--lora_rank", default=16, type=int, help="Rank of LoRA adapter")

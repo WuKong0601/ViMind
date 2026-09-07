@@ -63,7 +63,15 @@ st.markdown(
 )
 
 
-DEFAULT_CKPT = "out/dpo/vimind_dpo_final" if os.path.exists("out/dpo/vimind_dpo_final") else "out/sft/vimind_sft_final"
+candidates_ckpt = [
+    "out/dpo/vimind_64m_dpo_final",
+    "out/vimind_64m_dpo_final",
+    "out/sft/vimind_64m_sft_final",
+    "out/dpo/vimind_dpo_final",
+    "out/sft/vimind_sft_final",
+    "out/vimind_64m_final",
+]
+DEFAULT_CKPT = next((p for p in candidates_ckpt if os.path.exists(p)), "out/dpo/vimind_64m_dpo_final")
 
 
 @st.cache_resource(show_spinner=False)

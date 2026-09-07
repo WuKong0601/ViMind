@@ -16,7 +16,16 @@ from model.model import ViMindConfig, ViMindForCausalLM
 
 
 def main():
-    default_model = "out/dpo/vimind_dpo_final" if os.path.exists("out/dpo/vimind_dpo_final") else "out/sft/vimind_sft_final"
+    candidates = [
+        "out/dpo/vimind_64m_dpo_final",
+        "out/vimind_64m_dpo_final",
+        "out/sft/vimind_64m_sft_final",
+        "out/dpo/vimind_dpo_final",
+        "out/sft/vimind_sft_final",
+        "out/vimind_64m_final",
+    ]
+    default_model = next((p for p in candidates if os.path.exists(p)), "out/dpo/vimind_64m_dpo_final")
+    parser = argparse.ArgumentParser(description="ViMind Interactive Chat CLI")
     parser.add_argument("--model_path", type=str, default=default_model, help="Path to trained model directory")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Device (cuda:0 or cpu)")
     parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
