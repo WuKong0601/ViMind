@@ -147,43 +147,47 @@ Chạy bộ kiểm thử tự động toàn diện qua [benchmark_test.py](file:
 
 ```
 vimind/
-├── model/                         # Kiến trúc mạng nơ-ron & cấu hình Tokenizer
-│   ├── model.py                   # PyTorch ViMind (LLaMA-3, RMSNorm, RoPE, SwiGLU, GQA)
-│   ├── tokenizer.json             # File từ vựng Byte-BPE 12.8k tokens
-│   ├── tokenizer_config.json      # Cấu hình Tokenizer chuẩn Hugging Face
-│   └── special_tokens_map.json    # Định nghĩa các token đặc biệt (<|im_start|>, <|im_end|>, etc.)
+├── data_pipeline/                 # Pipeline thu thập, lọc và chuẩn hóa dữ liệu
+│   ├── clean_and_normalize.py     # Chuẩn hóa Unicode NFC, lọc quảng cáo & định dạng QA
+│   ├── download_textbooks_and_books.py # Thu thập Sách giáo khoa & Sách tiếng Việt
+│   └── download_wikipedia.py      # Tải & tiền xử lý Wikipedia tiếng Việt
 │
-├── dataset/                       # Pipeline xử lý dữ liệu và định dạng Dataset
-│   └── lm_dataset.py              # PretrainDataset, SFTDataset (Loss Masking), DPODataset
+├── dataset/                       # Dữ liệu huấn luyện & nạp tensor
+│   ├── lm_dataset.py              # PretrainDataset, SFTDataset, DPODataset & RLAIFDataset
+│   ├── pretrain_vi.jsonl          # 1.31 GB Wikipedia tiếng Việt
+│   ├── sft_vi.jsonl               # 52k mẫu đối thoại SFT tiếng Việt
+│   └── dpo_vi.jsonl               # 12.8k mẫu sở thích nhị phân DPO
 │
-├── data_pipeline/                 # Kịch bản tải và chuẩn hóa dữ liệu
-│   ├── clean_and_normalize.py     # Chuẩn hóa Unicode NFC và làm sạch dữ liệu
-│   ├── download_pretrain.py       # Tải Wikipedia tiếng Việt
-│   ├── download_sft.py            # Tải tập hội thoại SFT
-│   └── download_dpo.py            # Tải tập cặp ưu tiên DPO
+├── model/                         # Kiến trúc mô hình & Tokenizer
+│   ├── model.py                   # Cấu trúc LLaMA-3 pure PyTorch (26M / 64M / 104M)
+│   ├── model_lora.py              # Module Native LoRA (Inject, Freeze, Merge W_new)
+│   ├── tokenizer.json             # File từ vựng Byte-BPE 12.800 tokens
+│   └── tokenizer_config.json      # Cấu hình chat template và special tokens
 │
-├── trainer/                       # Các động cơ huấn luyện chuyên biệt
-│   ├── train_tokenizer.py         # Huấn luyện bộ tách từ Byte-BPE
-│   ├── pretrain.py                # Huấn luyện Next-Token-Prediction tiền kỳ
-│   ├── train_sft.py               # Huấn luyện SFT với Conversational Loss Masking
-│   ├── train_dpo.py               # Căn chỉnh DPO với Reference Model đóng băng
-│   ├── test_pipeline.py           # Bộ unit test kiểm thử 8/8 thành phần
-│   └── test_dpo_dry_run.py        # Kiểm thử tích hợp DPO trước khi chạy Kaggle
+├── trainer/                       # Bộ công cụ huấn luyện học máy
+│   ├── pretrain.py                # Huấn luyện tiền kỳ đa chu kỳ (Multi-Epoch Pretraining)
+│   ├── train_sft.py               # Tinh chỉnh có giám sát với Loss Masking
+│   ├── train_dpo.py               # Căn chỉnh sở thích trực tiếp DPO
+│   ├── train_distillation.py      # Chưng cất tri thức White-Box Logits KD
+│   ├── train_lora.py              # Tinh chỉnh tham số hiệu quả Native LoRA
+│   ├── train_grpo.py              # Học tăng cường DeepSeek-style GRPO với CoT (<think>)
+│   ├── rollout_engine.py          # Động cơ Rollout tính logprob token vector hóa
+│   ├── train_tokenizer.py         # Huấn luyện Byte-BPE Tokenizer từ đầu
+│   ├── test_pipeline.py           # Bộ kiểm thử hồi quy toàn diện 8/8 bài test
+│   ├── test_64m_dry_run.py        # Kiểm thử kiến trúc 64M & Gradient Checkpointing
+│   ├── test_distill_dry_run.py    # Kiểm thử chưng cất tri thức KD
+│   ├── test_lora_dry_run.py       # Kiểm thử Native LoRA & trọng số hợp nhất
+│   ├── test_grpo_dry_run.py       # Kiểm thử GRPO, Advantage & CoT Reasoning
+│   ├── test_dpo_dry_run.py        # Kiểm thử DPO Loss & Gradient
+│   └── test_sft_dry_run.py        # Kiểm thử SFT Masking
 │
-├── experiments/                   # Kho lưu trữ dữ liệu nghiên cứu phục vụ viết Paper
-│   ├── plot_curves.py             # Kịch bản vẽ biểu đồ huấn luyện độ phân giải cao
-│   └── vimind_1.0/
-│       ├── metrics_summary.json   # Chỉ số chi tiết từng bước (Loss, Acc, Margin, LR)
-│       ├── dpo_training.log       # Log huấn luyện DPO
-│       ├── sft_training.log       # Log huấn luyện SFT
-│       ├── pretrain_training.log  # Log huấn luyện Pre-training
-│       └── dpo_training_curves.png # Biểu đồ hội tụ DPO 300 DPI
+├── experiments/                   # Dữ liệu nghiên cứu phục vụ viết Paper
+│   ├── plot_curves.py             # Kịch bản vẽ biểu đồ huấn luyện khoa học 300 DPI
+│   └── vimind_1.0/                # Checkpoints, metrics, và biểu đồ công bố
 │
-├── app.py                         # Giao diện Web Chat Streamlit hiện đại
-├── benchmark_test.py              # Bộ kiểm thử hiệu năng và tác vụ tự động
-├── eval_chat.py                   # CLI tương tác trò chuyện trực tiếp qua Terminal
-├── test_inference.py              # So sánh kết quả sinh văn bản SFT vs. DPO
-├── train_notebook.ipynb           # Kaggle Notebook tự động hóa toàn bộ quá trình huấn luyện
+├── eval_llm.py                    # CLI tương tác trò chuyện & đo tốc độ sinh token
+├── test_inference.py              # So sánh kết quả sinh văn bản giữa các checkpoint
+├── train_notebook.ipynb           # Notebook tự động hóa huấn luyện trên Kaggle GPU
 ├── kernel-metadata.json           # Cấu hình Kaggle API đẩy kernel lên GPU cloud
 ├── requirements.txt               # Danh sách thư viện phụ thuộc
 └── README.md                      # Tài liệu kỹ thuật dự án (file này)
@@ -254,14 +258,20 @@ print(response)
 
 Mục tiêu tiếp theo sau cột mốc ViMind 1.0 là phát triển **ViMind 2.0**:
 
-- [ ] **Mở rộng quy mô tham số**: Tăng kích thước mô hình lên **64M – 104M** tham số ($d_{model} = 768$, layers = 12–16, ngữ cảnh 1.024 tokens) để tăng dung lượng lưu trữ tri thức sự thật.
-- [ ] **Làm giàu dữ liệu tiền kỳ (Knowledge Enrichment)**:
-  - Bổ sung 1 GB – 3 GB dữ liệu chất lượng cao: Sách giáo khoa (Toán, Văn, Sử, Địa, Lý, Hóa), bách khoa tri thức tổng quát và báo chí chọn lọc.
-  - Huấn luyện tiền kỳ từ 3 đến 5 Epochs (thay vì 1 Epoch đơn lẻ ở bản 1.0) nhằm ghi nhớ sâu các tri thức sự thật.
-- [ ] **Tối ưu hóa căn chỉnh DPO thế hệ mới**:
-  - Ứng dụng Length-Normalized DPO hoặc hạ hệ số $\beta = 0.05$ để ngăn ngừa hiện tượng sinh phản hồi quá ngắn.
-- [ ] **Xuất định dạng GGUF & Quantization 4-bit**:
-  - Cung cấp mô hình định dạng `.gguf` để chạy trực tiếp qua `llama.cpp` hoặc tích hợp vào Ollama.
+- [x] **Mở rộng quy mô tham số (ViMind 2.0 64M)**: Nâng cấp kiến trúc lên **62.8M** tham số ($d_{model} = 640$, layers = 12, GQA 10:5, ngữ cảnh 1.024 tokens) tích hợp Gradient Checkpointing native.
+- [x] **Làm giàu dữ liệu tiền kỳ (Textbooks & Books Pipeline)**:
+  - Tích hợp 300k cặp hỏi đáp Sách giáo khoa Toán / Khoa học (`LuminarAI/vietnamese-ms-hs-textbook-math-300K`) và 10.000 Sách tiếng Việt (`thailevann/10000_Vietnamese_Books`).
+  - Huấn luyện tiền kỳ đa chu kỳ (3 Epochs) với Cosine LR schedule tối ưu trên GPU Cloud.
+- [x] **Chưng cất tri thức (White-Box Knowledge Distillation)**:
+  - Động cơ chưng cất mềm kết hợp KL Divergence ($T^2$ scaled) và Ground-Truth Cross-Entropy với Conversational Loss Masking (`trainer/train_distillation.py`).
+- [x] **Tinh chỉnh thích ứng thứ hạng thấp bản địa (Native Zero-Dependency LoRA)**:
+  - Triển khai LoRA thuần PyTorch, hỗ trợ inject động vào các tầng attention (`q, k, v, o`), đóng băng base model, lưu adapter độc lập và hợp nhất không hao tổn (`W_new = W + BA`).
+- [x] **Học tăng cường suy luận sâu (DeepSeek-style GRPO with CoT)**:
+  - Thuật toán Group Relative Policy Optimization không cần mạng Critic, chuẩn hóa Advantage theo nhóm mẫu sinh, hỗ trợ Chain-of-Thought (`<think>...</think>`) và phạt lặp từ (`trainer/train_grpo.py`).
+- [x] **Công cụ đánh giá & đo tốc độ suy luận trực tiếp**:
+  - `eval_llm.py` hỗ trợ TextStreamer, đo tốc độ sinh token (tokens/s), hot-swap LoRA adapters và tương tác CLI.
+- [ ] **Mở rộng ngữ cảnh & Nghiên cứu tiếp theo**:
+  - Đánh giá năng lực suy luận toán & tiếng Việt của mô hình 64M sau khi hoàn thành chu kỳ Pre-train / SFT / GRPO.
 
 ---
 
