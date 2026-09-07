@@ -54,6 +54,48 @@ class ViMindConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.flash_attn = flash_attn
 
+    @classmethod
+    def get_config_26m(cls, vocab_size: int = 12800, **kwargs):
+        """ViMind 1.0 (26.2M parameter baseline, 8 layers, 512 dim)"""
+        return cls(
+            vocab_size=vocab_size,
+            hidden_size=512,
+            num_hidden_layers=8,
+            num_attention_heads=8,
+            num_key_value_heads=4,
+            intermediate_size=1088,
+            max_position_embeddings=1024,
+            **kwargs,
+        )
+
+    @classmethod
+    def get_config_64m(cls, vocab_size: int = 12800, **kwargs):
+        """ViMind 2.0 (62.8M parameters, deeper 12 layers, 640 dim, 1024 context)"""
+        return cls(
+            vocab_size=vocab_size,
+            hidden_size=640,
+            num_hidden_layers=12,
+            num_attention_heads=10,
+            num_key_value_heads=5,
+            intermediate_size=1728,
+            max_position_embeddings=1024,
+            **kwargs,
+        )
+
+    @classmethod
+    def get_config_104m(cls, vocab_size: int = 12800, **kwargs):
+        """ViMind 2.0 Plus (104M parameters, 16 layers, 768 dim, 1024 context)"""
+        return cls(
+            vocab_size=vocab_size,
+            hidden_size=768,
+            num_hidden_layers=16,
+            num_attention_heads=12,
+            num_key_value_heads=4,
+            intermediate_size=2048,
+            max_position_embeddings=1024,
+            **kwargs,
+        )
+
 
 # ==============================================================================
 # Model Architecture Components
@@ -260,6 +302,7 @@ class ViMindModel(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.layers = nn.ModuleList([ViMindBlock(i, config) for i in range(config.num_hidden_layers)])
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.gradient_checkpointing = False
 
         # Precompute RoPE tables
         freqs_cos, freqs_sin = precompute_freqs_cis(
@@ -314,13 +357,29 @@ class ViMindModel(nn.Module):
 
         presents = []
         for layer, past_kv in zip(self.layers, past_key_values):
-            hidden_states, present_kv = layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                past_key_value=past_kv,
-                use_cache=use_cache,
-                attention_mask=attention_mask,
-            )
+            if self.gradient_checkpointing and self.training:
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs)
+                    return custom_forward
+
+                hidden_states, present_kv = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer),
+                    hidden_states,
+                    position_embeddings,
+                    past_kv,
+                    use_cache,
+                    attention_mask,
+                    use_reentrant=False,
+                )
+            else:
+                hidden_states, present_kv = layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    past_key_value=past_kv,
+                    use_cache=use_cache,
+                    attention_mask=attention_mask,
+                )
             presents.append(present_kv)
 
         hidden_states = self.norm(hidden_states)
@@ -345,6 +404,12 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             self.lm_head.weight = self.model.embed_tokens.weight
 
         self.post_init()
+
+    def gradient_checkpointing_enable(self, **kwargs):
+        self.model.gradient_checkpointing = True
+
+    def gradient_checkpointing_disable(self):
+        self.model.gradient_checkpointing = False
 
     def tie_weights(self, *args, **kwargs):
         super().tie_weights(*args, **kwargs)

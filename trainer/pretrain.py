@@ -64,7 +64,7 @@ def format_time(seconds: float) -> str:
 
 def save_checkpoint(model, tokenizer, config, optimizer, scaler, epoch: int, step: int, save_dir: str, prefix: str):
     os.makedirs(save_dir, exist_ok=True)
-    step_save_dir = os.path.join(save_dir, f"{prefix}_step_{step}")
+    step_save_dir = os.path.join(save_dir, f"{prefix}_step_{step}" if "epoch" not in prefix else prefix)
     os.makedirs(step_save_dir, exist_ok=True)
 
     # Save Hugging Face compatible format
@@ -84,6 +84,32 @@ def save_checkpoint(model, tokenizer, config, optimizer, scaler, epoch: int, ste
 
 
 def train(args):
+    # Apply architecture presets
+    if args.model_size == "64m":
+        args.hidden_size = 640
+        args.num_hidden_layers = 12
+        args.num_attention_heads = 10
+        args.num_key_value_heads = 5
+        args.intermediate_size = 1728
+        args.max_seq_len = 1024
+        args.save_weight = "vimind_64m"
+    elif args.model_size == "26m":
+        args.hidden_size = 512
+        args.num_hidden_layers = 8
+        args.num_attention_heads = 8
+        args.num_key_value_heads = 4
+        args.intermediate_size = 1088
+        args.max_seq_len = 512
+        args.save_weight = "vimind_26m"
+    elif args.model_size == "104m":
+        args.hidden_size = 768
+        args.num_hidden_layers = 16
+        args.num_attention_heads = 12
+        args.num_key_value_heads = 4
+        args.intermediate_size = 2048
+        args.max_seq_len = 1024
+        args.save_weight = "vimind_104m"
+
     # Device setup
     if "cuda" in args.device and torch.cuda.is_available():
         try:
@@ -116,11 +142,12 @@ def train(args):
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
 
     print("=" * 70)
-    print(f"🚀 Starting ViMind Pre-training")
+    print(f"🚀 Starting ViMind Pre-training ({args.model_size.upper()})")
     print(f"   Device: {args.device} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'})")
     print(f"   Precision: {args.dtype} (Scaler: {use_scaler})")
     print(f"   Batch Size: {args.batch_size} (Grad Accum: {args.accumulation_steps}) -> Effective: {args.batch_size * args.accumulation_steps}")
-    print(f"   Max Seq Len: {args.max_seq_len}")
+    print(f"   Max Seq Len: {args.max_seq_len} | Epochs: {args.epochs}")
+    print(f"   Gradient Checkpointing: {args.gradient_checkpointing}")
     print("=" * 70)
 
     # 1. Load Tokenizer
@@ -130,7 +157,7 @@ def train(args):
     print(f"      Tokenizer vocab size: {vocab_size:,}")
 
     # 2. Build Model
-    print(f"[2/5] Initializing ViMind Model...")
+    print(f"[2/5] Initializing ViMind Model ({args.model_size})...")
     config = ViMindConfig(
         vocab_size=vocab_size,
         hidden_size=args.hidden_size,
@@ -141,7 +168,16 @@ def train(args):
         max_position_embeddings=args.max_seq_len,
         dropout=args.dropout,
     )
-    model = ViMindForCausalLM(config)
+
+    if args.resume_from_checkpoint and os.path.exists(args.resume_from_checkpoint):
+        print(f"      Resuming model weights from checkpoint: {args.resume_from_checkpoint}...")
+        model = ViMindForCausalLM.from_pretrained(args.resume_from_checkpoint)
+    else:
+        model = ViMindForCausalLM(config)
+
+    if args.gradient_checkpointing:
+        print("      ⚡ Gradient Checkpointing enabled.")
+        model.gradient_checkpointing_enable()
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -169,7 +205,7 @@ def train(args):
     num_batches_per_epoch = len(train_loader)
     total_steps = num_batches_per_epoch * args.epochs
     print(f"      Total samples: {len(train_dataset):,}")
-    print(f"      Batches per epoch: {num_batches_per_epoch:,} | Total Steps: {total_steps:,}")
+    print(f"      Batches per epoch: {num_batches_per_epoch:,} | Total Steps across {args.epochs} epochs: {total_steps:,}")
 
     # 4. Optimizer & Schedule
     print(f"[4/5] Setting up AdamW optimizer and Cosine LR schedule...")
@@ -179,9 +215,24 @@ def train(args):
         learning_rate=args.learning_rate,
     )
 
+    # Resume trainer state if provided
+    start_epoch = 1
+    global_step = 0
+    if args.resume_from_checkpoint and os.path.exists(args.resume_from_checkpoint):
+        state_file = os.path.join(args.resume_from_checkpoint, "trainer_state.pt")
+        if os.path.exists(state_file):
+            print(f"      Restoring optimizer & scaler state from {state_file}...")
+            state = torch.load(state_file, map_location=device)
+            start_epoch = state.get("epoch", 1)
+            global_step = state.get("step", 0)
+            if "optimizer_state_dict" in state and state["optimizer_state_dict"]:
+                optimizer.load_state_dict(state["optimizer_state_dict"])
+            if use_scaler and "scaler_state_dict" in state and state["scaler_state_dict"]:
+                scaler.load_state_dict(state["scaler_state_dict"])
+            print(f"      Resuming from Epoch {start_epoch}, Step {global_step}...")
+
     # 5. Training Loop
     print(f"[5/5] Commencing training loop for {args.epochs} epoch(s)...")
-    global_step = 0
     running_loss = 0.0
     accumulated_loss = 0.0
     start_time = time.time()
@@ -189,12 +240,12 @@ def train(args):
 
     os.makedirs(args.save_dir, exist_ok=True)
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         print(f"\n--- Epoch {epoch}/{args.epochs} ---")
         for step, (input_ids, labels) in enumerate(train_loader, start=1):
             global_step += 1
 
-            # Update Learning Rate
+            # Update Learning Rate across entire multi-epoch budget
             lr = get_lr(
                 current_step=global_step,
                 total_steps=total_steps,
@@ -243,7 +294,7 @@ def train(args):
 
                 steps_done = global_step
                 steps_remaining = total_steps - steps_done
-                speed = args.log_interval / elapsed
+                speed = args.log_interval / max(1e-4, elapsed)
                 eta_seconds = steps_remaining / max(1e-4, speed)
 
                 percent = (steps_done / total_steps) * 100
@@ -270,9 +321,24 @@ def train(args):
                 )
                 model.train()
 
+        # Save End-of-Epoch Checkpoint
+        print(f"\n✅ Completed Epoch {epoch}/{args.epochs}. Saving epoch checkpoint...")
+        save_checkpoint(
+            model=model,
+            tokenizer=tokenizer,
+            config=config,
+            optimizer=optimizer,
+            scaler=scaler,
+            epoch=epoch,
+            step=global_step,
+            save_dir=args.save_dir,
+            prefix=f"{args.save_weight}_epoch_{epoch}",
+        )
+        model.train()
+
     # Save Final Model
     final_save_dir = os.path.join(args.save_dir, f"{args.save_weight}_final")
-    print(f"\n🎉 Training complete! Total training time: {format_time(time.time() - start_time)}")
+    print(f"\n🎉 Multi-epoch Training complete! Total training time: {format_time(time.time() - start_time)}")
     print(f"💾 Saving final model to: {final_save_dir}...")
     os.makedirs(final_save_dir, exist_ok=True)
     model.save_pretrained(final_save_dir)
@@ -281,32 +347,35 @@ def train(args):
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="ViMind Pretraining Script")
+    parser = argparse.ArgumentParser(description="ViMind Multi-Epoch Pretraining Script")
 
     # Data and model directories
     parser.add_argument("--data_path", type=str, default="dataset/pretrain_vi.jsonl", help="Path to pretrain jsonl dataset")
     parser.add_argument("--tokenizer_dir", type=str, default="model", help="Directory of trained tokenizer")
     parser.add_argument("--save_dir", type=str, default="out", help="Directory to save checkpoints")
-    parser.add_argument("--save_weight", type=str, default="vimind_26m", help="Prefix for checkpoint filenames")
+    parser.add_argument("--save_weight", type=str, default="vimind_64m", help="Prefix for checkpoint filenames")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint directory to resume")
 
     # Architecture Hyperparameters
-    parser.add_argument("--hidden_size", type=int, default=512, help="Hidden dimension size")
-    parser.add_argument("--num_hidden_layers", type=int, default=8, help="Number of transformer layers")
-    parser.add_argument("--num_attention_heads", type=int, default=8, help="Number of query attention heads")
-    parser.add_argument("--num_key_value_heads", type=int, default=4, help="Number of key/value heads for GQA")
-    parser.add_argument("--intermediate_size", type=int, default=1088, help="SwiGLU intermediate dimension (~26M total params)")
-    parser.add_argument("--max_seq_len", type=int, default=512, help="Maximum sequence length")
+    parser.add_argument("--model_size", type=str, default="64m", choices=["26m", "64m", "104m", "custom"], help="Architecture preset")
+    parser.add_argument("--hidden_size", type=int, default=640, help="Hidden dimension size")
+    parser.add_argument("--num_hidden_layers", type=int, default=12, help="Number of transformer layers")
+    parser.add_argument("--num_attention_heads", type=int, default=10, help="Number of query attention heads")
+    parser.add_argument("--num_key_value_heads", type=int, default=5, help="Number of key/value heads for GQA")
+    parser.add_argument("--intermediate_size", type=int, default=1728, help="SwiGLU intermediate dimension")
+    parser.add_argument("--max_seq_len", type=int, default=1024, help="Maximum sequence length")
     parser.add_argument("--dropout", type=float, default=0.0, help="Dropout probability")
+    parser.add_argument("--gradient_checkpointing", action="store_true", help="Enable gradient checkpointing to save VRAM")
 
     # Training Hyperparameters
-    parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=32, help="Micro-batch size per forward step")
-    parser.add_argument("--accumulation_steps", type=int, default=4, help="Gradient accumulation steps")
+    parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=16, help="Micro-batch size per forward step")
+    parser.add_argument("--accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
     parser.add_argument("--learning_rate", type=float, default=5e-4, help="Peak learning rate")
     parser.add_argument("--min_lr", type=float, default=5e-5, help="Minimum learning rate at end of cosine decay")
-    parser.add_argument("--weight_decay", type=float, default=0.1, help="AdamW weight decay")
+    parser.add_argument("--weight_decay", type=float, default=0.01, help="AdamW weight decay")
     parser.add_argument("--grad_clip", type=float, default=1.0, help="Gradient clipping norm")
-    parser.add_argument("--warmup_iters", type=int, default=200, help="Number of linear warmup steps")
+    parser.add_argument("--warmup_iters", type=int, default=300, help="Number of linear warmup steps")
 
     # System & Optimization
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Device to use (cuda:0 or cpu)")
