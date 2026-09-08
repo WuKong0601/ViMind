@@ -64,18 +64,46 @@ def convert_and_export(
     print("Initializing ViMind model architecture...")
     model = ViMindForCausalLM(config)
 
-    # 3. Load base weights if checkpoint exists
-    if os.path.exists(input_checkpoint):
-        print(f"Loading base weights from {input_checkpoint}...")
-        if input_checkpoint.endswith(".safetensors"):
+    # 3. Locate & Load base weights
+    resolved_path = input_checkpoint
+    if not os.path.exists(resolved_path):
+        candidates = [
+            resolved_path + ".pth",
+            os.path.join(os.path.dirname(resolved_path), "vimind_3.0_moe_final", "model.safetensors"),
+            os.path.join(os.path.dirname(resolved_path), "vimind_3.0_agent_final", "model.safetensors"),
+            os.path.join("out", "agent_rl", "vimind_3.0_agent_final", "model.safetensors"),
+            os.path.join("out", "agent_rl", "vimind_3.0_agent.pth"),
+            os.path.join("out", "sft_moe", "vimind_3.0_moe_final", "model.safetensors"),
+            os.path.join("out", "sft_moe", "vimind_3.0_moe.pth"),
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                resolved_path = c
+                break
+
+    if os.path.isdir(resolved_path):
+        if os.path.exists(os.path.join(resolved_path, "model.safetensors")):
+            resolved_path = os.path.join(resolved_path, "model.safetensors")
+        elif os.path.exists(os.path.join(resolved_path, "pytorch_model.bin")):
+            resolved_path = os.path.join(resolved_path, "pytorch_model.bin")
+        else:
+            # Check any .pth or .safetensors inside
+            for fname in os.listdir(resolved_path):
+                if fname.endswith((".safetensors", ".pth", ".bin")):
+                    resolved_path = os.path.join(resolved_path, fname)
+                    break
+
+    if os.path.exists(resolved_path) and not os.path.isdir(resolved_path):
+        print(f"Loading base weights from {resolved_path}...")
+        if resolved_path.endswith(".safetensors"):
             try:
                 from safetensors.torch import load_file
-                state_dict = load_file(input_checkpoint)
+                state_dict = load_file(resolved_path)
             except ImportError:
                 print("[Error] safetensors library is required. Install: pip install safetensors")
                 return
         else:
-            state_dict = torch.load(input_checkpoint, map_location="cpu")
+            state_dict = torch.load(resolved_path, map_location="cpu")
 
         # Handle unwrapping nested 'model' or 'module' prefix
         if "model" in state_dict and isinstance(state_dict["model"], dict):
@@ -83,9 +111,9 @@ def convert_and_export(
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
 
         missing, unexpected = model.load_state_dict(state_dict, strict=False)
-        print(f"Base weights loaded. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+        print(f"Base weights loaded successfully. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
     else:
-        print(f"[Warning] Base checkpoint {input_checkpoint} not found. Exporting blank architecture template.")
+        print(f"[Warning] Base checkpoint not found at {input_checkpoint} or candidates. Exporting blank architecture template.")
 
     # 4. Merge LoRA if provided
     if lora_dir and os.path.exists(lora_dir):

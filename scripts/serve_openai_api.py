@@ -262,7 +262,16 @@ async def chat_completions(req: ChatCompletionRequest):
 def start_server():
     global model, tokenizer, server_device
     parser = argparse.ArgumentParser(description="ViMind 3.0 OpenAI Compatible API Server")
-    parser.add_argument("--model_path", type=str, default="out/dpo/vimind_64m_dpo_final", help="Path to model checkpoint")
+    default_ckpt_candidates = [
+        "out/vimind_3.0_hf",
+        "out/agent_rl/vimind_3.0_agent_final",
+        "out/sft_moe/vimind_3.0_moe_final",
+        "kaggle_logs_v14/vimind_3.0_moe_final",
+        "out/dpo/vimind_64m_dpo_final",
+        "out/vimind_64m_final",
+    ]
+    auto_default = next((p for p in default_ckpt_candidates if os.path.exists(p)), "out/vimind_3.0_hf")
+    parser.add_argument("--model_path", type=str, default=auto_default, help="Path to model checkpoint")
     parser.add_argument("--tokenizer_dir", type=str, default="model", help="Path to tokenizer directory")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8000, help="Port number")
@@ -281,8 +290,15 @@ def start_server():
     print("=" * 65)
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_dir)
-    if os.path.exists(args.model_path):
-        model = ViMindForCausalLM.from_pretrained(args.model_path).to(server_device)
+    actual_path = args.model_path
+    if not os.path.exists(actual_path):
+        for c in default_ckpt_candidates:
+            if os.path.exists(c):
+                actual_path = c
+                break
+
+    if os.path.exists(actual_path):
+        model = ViMindForCausalLM.from_pretrained(actual_path).to(server_device)
     else:
         print(f"⚠️ Checkpoint {args.model_path} chưa có sẵn. Khởi tạo ViMind 64M testing preset...")
         cfg = ViMindConfig.get_config_64m(vocab_size=len(tokenizer))

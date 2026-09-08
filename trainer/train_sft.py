@@ -282,11 +282,13 @@ def train_sft(args):
 
     # Save Final SFT Model
     final_save_dir = os.path.join(args.save_dir, f"{args.save_weight}_final")
+    pth_save_path = os.path.join(args.save_dir, f"{args.save_weight}.pth")
     print(f"\n🎉 SFT Training complete! Total training time: {format_time(time.time() - start_time)}")
-    print(f"💾 Saving final SFT model to: {final_save_dir}...")
+    print(f"💾 Saving final SFT model to: {final_save_dir} & {pth_save_path}...")
     os.makedirs(final_save_dir, exist_ok=True)
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    torch.save(model.state_dict(), pth_save_path)
     print("✅ SFT Model weights and tokenizer saved successfully!")
 
 

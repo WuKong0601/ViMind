@@ -90,7 +90,10 @@ st.markdown(
 
 CANDIDATES_CKPT = [
     "out/vimind_3.0_hf",
+    "kaggle_logs_v14/vimind_3.0_moe_final",
+    "out/agent_rl/vimind_3.0_agent_final",
     "out/agent_rl",
+    "out/sft_moe/vimind_3.0_moe_final",
     "out/sft_moe",
     "out/dpo_qwen",
     "out/dpo/vimind_64m_dpo_final",

@@ -203,9 +203,9 @@ def run_judge_pipeline(args):
 
 def get_parser():
     parser = argparse.ArgumentParser(description="ViMind 3.0: LLM-as-a-Judge Offline DPO Generation")
-    parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-7B-Instruct", help="Path or HuggingFace repo for Judge")
-    parser.add_argument("--input_data", type=str, default="dataset/candidate_pairs.jsonl", help="Input candidate pairs jsonl")
-    parser.add_argument("--output_path", type=str, default="dataset/dpo_qwen_judged.jsonl", help="Output clean DPO jsonl")
+    parser.add_argument("--model_name_or_path", "--judge_model", dest="model_name_or_path", type=str, default="Qwen/Qwen2.5-7B-Instruct", help="Path or HuggingFace repo for Judge")
+    parser.add_argument("--input_data", "--input_candidates", dest="input_data", type=str, default="dataset/candidate_pairs.jsonl", help="Input candidate pairs jsonl")
+    parser.add_argument("--output_path", "--output_file", dest="output_path", type=str, default="dataset/dpo_qwen_judged.jsonl", help="Output clean DPO jsonl")
     parser.add_argument("--max_samples", type=int, default=10000, help="Max pairs to evaluate")
     parser.add_argument("--load_in_4bit", action="store_true", help="Enable 4-bit BitsAndBytes quantization")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Compute device")

@@ -238,7 +238,31 @@ def train_agent(args):
     # 1. Load Tokenizer & Model
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_dir)
     print(f"📦 Loading Policy Model from: {args.model_path}...")
-    model = ViMindForCausalLM.from_pretrained(args.model_path).to(device)
+    actual_model_path = args.model_path
+    if os.path.isdir(actual_model_path):
+        if not os.path.exists(os.path.join(actual_model_path, "config.json")):
+            # Look inside subfolders
+            subfolders = [os.path.join(actual_model_path, d) for d in os.listdir(actual_model_path) if os.path.isdir(os.path.join(actual_model_path, d))]
+            for sf in subfolders:
+                if os.path.exists(os.path.join(sf, "config.json")):
+                    actual_model_path = sf
+                    break
+
+    if os.path.exists(actual_model_path) and (os.path.isdir(actual_model_path) or actual_model_path.endswith((".safetensors", ".pth", ".bin"))):
+        if os.path.isdir(actual_model_path):
+            model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
+        else:
+            config = ViMindConfig(use_moe=True, num_experts=4)
+            model = ViMindForCausalLM(config)
+            st = torch.load(actual_model_path, map_location="cpu") if not actual_model_path.endswith(".safetensors") else None
+            if st:
+                model.load_state_dict(st, strict=False)
+            model = model.to(device)
+    else:
+        print(f"⚠️ Model path {args.model_path} not found directly, initializing fresh MoE architecture...")
+        config = ViMindConfig(use_moe=True, num_experts=4)
+        model = ViMindForCausalLM(config).to(device)
+
     model.train()
 
     reward_model = LMForRewardModel(args.reward_model_path, device=str(device)) if args.reward_model_path != "none" else None
@@ -322,9 +346,11 @@ def train_agent(args):
     # Save final agent model
     os.makedirs(args.save_dir, exist_ok=True)
     final_save_dir = os.path.join(args.save_dir, f"{args.save_weight}_final")
-    print(f"\n🎉 Agentic RL Hoàn thành! Đang lưu mô hình ra: {final_save_dir}...")
+    pth_save_path = os.path.join(args.save_dir, f"{args.save_weight}.pth")
+    print(f"\n🎉 Agentic RL Hoàn thành! Đang lưu mô hình ra: {final_save_dir} & {pth_save_path}...")
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    torch.save(model.state_dict(), pth_save_path)
     print("✅ Mô hình Agent ViMind 3.0 đã sẵn sàng xuất xưởng!")
 
 
@@ -338,7 +364,9 @@ def get_parser():
     parser.add_argument("--save_weight", type=str, default="vimind_3.0_agent", help="Prefix for save weight")
     parser.add_argument("--batch_size", type=int, default=2, help="Batch size")
     parser.add_argument("--epochs", type=int, default=1, help="Training epochs")
-    parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
+    parser.add_argument("--learning_rate", "--lr", dest="learning_rate", type=float, default=2e-5, help="Learning rate")
+    parser.add_argument("--num_rollouts", type=int, default=4, help="Number of rollouts per sample")
+    parser.add_argument("--fp16", action="store_true", help="Enable half precision training")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Compute device")
     parser.add_argument("--log_interval", type=int, default=5, help="Logging step interval")
     return parser

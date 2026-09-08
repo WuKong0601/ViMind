@@ -149,8 +149,29 @@ def build_v3_datasets(output_dir="dataset"):
             f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
             total_samples += 1
 
-        # Existing SFT if available
+        # Existing SFT if available, or automatically download base Alpaca SFT
         existing_sft = os.path.join(output_dir, "sft_vi.jsonl")
+        if not os.path.exists(existing_sft):
+            print("⚡ Chưa tìm thấy dataset/sft_vi.jsonl. Tự động tải 5CD-AI/Vietnamese-alpaca-gpt4-gg-translated...")
+            try:
+                from download_sft import main as run_download_sft
+                run_download_sft()
+            except Exception as e:
+                print(f"⚠️ Lỗi khi tải dataset Alpaca ({e}). Thử gọi qua datasets thư viện trực tiếp...")
+                try:
+                    from datasets import load_dataset
+                    ds = load_dataset("5CD-AI/Vietnamese-alpaca-gpt4-gg-translated", split="train")
+                    with open(existing_sft, "w", encoding="utf-8") as f_sft:
+                        for item in ds:
+                            ins = item.get("instruction_vi", "")
+                            inp = item.get("input_vi", "")
+                            out = item.get("output_vi", "")
+                            p = f"{ins}\n\n{inp}" if inp else ins
+                            if p and out:
+                                f_sft.write(json.dumps({"conversations": [{"role": "user", "content": p}, {"role": "assistant", "content": out}]}, ensure_ascii=False) + "\n")
+                except Exception as ex:
+                    print(f"⚠️ Không thể tải Alpaca tự động: {ex}")
+
         if os.path.exists(existing_sft):
             with open(existing_sft, "r", encoding="utf-8") as f_in:
                 for line in f_in:
