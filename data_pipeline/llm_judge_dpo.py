@@ -14,7 +14,12 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from data_pipeline.filter_dpo_refusals import clean_dpo_pair, filter_dpo_file
 
 
 JUDGE_SYSTEM_PROMPT = """Bạn là một chuyên gia ngôn ngữ học tiếng Việt và là một giám khảo thẩm định AI khách quan, công tâm bậc nhất.
@@ -23,6 +28,8 @@ Nhiệm vụ của bạn là đọc một câu hỏi và so sánh hai phương �
 Các tiêu chí thẩm định:
 1. ĐỘ CHÍNH XÁC THỰC TẾ (Factual Accuracy): Tuyệt đối không chứa ảo giác, sai lệch thông tin địa lý, lịch sử, con người hoặc khoa học (ví dụ: Thủ đô Việt Nam phải là Hà Nội). Nếu một câu trả lời sai sự thật, câu đó PHẢI BỊ XẾP KÉM HƠN.
 2. TÍNH HỮU ÍCH & MẠCH LẠC: Câu trả lời đi thẳng vào vấn đề, phân tích logic, định dạng danh sách rõ ràng, văn phong tiếng Việt tự nhiên và chuẩn mực.
+3. CHỐNG TỪ CHỐI MÁY MÓC (Strict Anti-Refusal): Tuyệt đối TRỪ ĐIỂM NẶNG / XẾP KÉM HƠN nếu câu trả lời từ chối một cách máy móc, vô căn cứ với các mẫu câu như "Tôi xin lỗi, tôi là một AI nên tôi không thể...", "Là một mô hình ngôn ngữ...", "Tôi không có khả năng..." đối với các câu hỏi kiến thức phổ thông, logic, hoặc lập trình thông thường! Trừ khi câu hỏi vi phạm nghiêm trọng về an toàn (vũ khí, ma túy, bạo lực), một AI tốt PHẢI nỗ lực trả lời câu hỏi của người dùng thay vì lười biếng từ chối.
+4. LOẠI BỎ KHẨU HIỆU RƯỜM RÀ: Ưu tiên phương án đi thẳng vào câu trả lời thay vì mở đầu bằng các câu chào hỏi sáo rỗng hoặc phân trần về bản thân.
 
 Quy tắc bắt buộc:
 Hãy đưa ra nhận xét ngắn gọn và ở dòng cuối cùng, PHẢI ghi chính xác:
@@ -235,6 +242,14 @@ def run_judge_pipeline(args):
     print("=" * 70)
     print(f"🎉 Hoàn thành thẩm định! Đã ghi {labeled_count} mẫu DPO sạch ra: {args.output_path}")
     print("=" * 70)
+
+    # Automatically sanitize and inject anti-refusal grounding pairs
+    clean_output = args.output_path.replace(".jsonl", "_clean.jsonl") if not args.output_path.endswith("_clean.jsonl") else args.output_path
+    print("[Post-Process] Khởi chạy bộ lọc khử từ chối máy móc và tiêm dữ liệu Factual Grounding...")
+    filter_dpo_file(args.output_path, clean_output, inject_grounding=True)
+    # Also overwrite the target file so downstream training picks up clean pairs seamlessly
+    if clean_output != args.output_path:
+        filter_dpo_file(args.output_path, args.output_path, inject_grounding=True)
 
 
 def get_parser():

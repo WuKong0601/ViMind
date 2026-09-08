@@ -152,10 +152,12 @@ def convert_and_export(
     try:
         from safetensors.torch import save_model, save_file
         try:
-            save_model(model, safetensors_path)
+            save_model(model, safetensors_path, metadata={"format": "pt"})
         except Exception:
             state_dict = {k: v.clone().contiguous() for k, v in model.state_dict().items()}
-            save_file(state_dict, safetensors_path)
+            if "model.embed_tokens.weight" not in state_dict and "lm_head.weight" in state_dict:
+                state_dict["model.embed_tokens.weight"] = state_dict["lm_head.weight"].clone()
+            save_file(state_dict, safetensors_path, metadata={"format": "pt"})
         print(f"Saved SafeTensors weights to: {safetensors_path}")
     except ImportError:
         torch_path = os.path.join(output_dir, "pytorch_model.bin")

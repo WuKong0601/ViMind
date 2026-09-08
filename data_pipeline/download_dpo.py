@@ -36,15 +36,24 @@ def process_dpo_pair(item):
         
     if not prompt or not chosen_content or not rejected_content:
         return None
+
+    try:
+        from filter_dpo_refusals import clean_dpo_pair
+    except ImportError:
+        from data_pipeline.filter_dpo_refusals import clean_dpo_pair
+
+    p_clean, c_clean, r_clean, action = clean_dpo_pair(prompt, chosen_content, rejected_content)
+    if not p_clean or not c_clean or not r_clean:
+        return None
         
     return {
         "chosen": [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": chosen_content}
+            {"role": "user", "content": p_clean},
+            {"role": "assistant", "content": c_clean}
         ],
         "rejected": [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": rejected_content}
+            {"role": "user", "content": p_clean},
+            {"role": "assistant", "content": r_clean}
         ]
     }
 
