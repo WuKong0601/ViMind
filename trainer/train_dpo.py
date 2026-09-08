@@ -183,8 +183,17 @@ def train_dpo(args):
 
     # 4. Load Models: Policy Model & Frozen Reference Model
     print(f"[3/5] Loading Policy Model and Reference Model from: {args.model_path}...")
-    policy_model = ViMindForCausalLM.from_pretrained(args.model_path).to(device)
-    ref_model = ViMindForCausalLM.from_pretrained(args.model_path).to(device)
+    actual_model_path = args.model_path
+    if os.path.isdir(actual_model_path):
+        if not os.path.exists(os.path.join(actual_model_path, "config.json")):
+            subfolders = [os.path.join(actual_model_path, d) for d in os.listdir(actual_model_path) if os.path.isdir(os.path.join(actual_model_path, d))]
+            for sf in subfolders:
+                if os.path.exists(os.path.join(sf, "config.json")):
+                    actual_model_path = sf
+                    break
+
+    policy_model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
+    ref_model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
 
     # Freeze reference model
     ref_model.eval()
@@ -356,7 +365,9 @@ def train_dpo(args):
     policy_model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
     config.save_pretrained(final_save_dir)
-    print("✅ ViMind 1.0 Model weights and tokenizer saved successfully!")
+    pth_path = os.path.join(args.save_dir, f"{args.save_weight}.pth")
+    torch.save(policy_model.state_dict(), pth_path)
+    print(f"✅ ViMind Model weights saved successfully to {final_save_dir} and {pth_path}!")
 
 
 if __name__ == "__main__":

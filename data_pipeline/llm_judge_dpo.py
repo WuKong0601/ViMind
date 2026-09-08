@@ -45,6 +45,32 @@ def parse_judgment(judge_text: str) -> Optional[str]:
         return "B"
     return None
 
+def extract_candidate_pair(item):
+    """Extract (prompt, resp_a, resp_b) from multiple possible data schemas."""
+    # 1. Direct prompt / response_a / response_b
+    prompt = item.get("prompt") or item.get("query") or item.get("question") or item.get("question_vi")
+    resp_a = item.get("response_a") or item.get("candidate_1") or item.get("chosen_vi")
+    resp_b = item.get("response_b") or item.get("candidate_2") or item.get("rejected_vi")
+
+    # 2. Chosen / Rejected format (standard DPO dataset)
+    if (not resp_a or not resp_b) and "chosen" in item and "rejected" in item:
+        chosen = item["chosen"]
+        rejected = item["rejected"]
+        if isinstance(chosen, list) and len(chosen) >= 2:
+            prompt = prompt or chosen[0].get("content", "")
+            resp_a = chosen[1].get("content", "")
+        elif isinstance(chosen, str):
+            resp_a = chosen
+        if isinstance(rejected, list) and len(rejected) >= 2:
+            prompt = prompt or rejected[0].get("content", "")
+            resp_b = rejected[1].get("content", "")
+        elif isinstance(rejected, str):
+            resp_b = rejected
+
+    if prompt and resp_a and resp_b:
+        return prompt.strip(), resp_a.strip(), resp_b.strip()
+    return None
+
 
 def run_judge_pipeline(args):
     print("=" * 70)
@@ -87,40 +113,56 @@ def run_judge_pipeline(args):
 
     # 2. Read Candidate Pairs
     print(f"[2/3] Đọc dữ liệu ứng cử viên từ: {args.input_data}...")
-    candidate_samples = []
-    if os.path.exists(args.input_data):
-        with open(args.input_data, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    data = json.loads(line)
-                    candidate_samples.append(data)
-                except Exception:
-                    continue
-    else:
-        print(f"   ⚠️ Tệp {args.input_data} không tồn tại. Tạo 5 mẫu minh họa kiểm thử...")
-        candidate_samples = [
-            {
-                "prompt": "Thủ đô của Việt Nam là gì?",
-                "response_a": "Thủ đô của Việt Nam là thành phố Hà Nội. Đây là trung tâm chính trị, văn hóa và kinh tế quan trọng của cả nước.",
-                "response_b": "Thủ đô của Pháp nằm ở Tây Ban Nha, nằm ở khu vực trung tâm của Pháp.",
-            },
-            {
-                "prompt": "Giải thích ngắn gọn Trí tuệ nhân tạo (AI) là gì?",
-                "response_a": "AI (Artificial Intelligence) là một nhánh của khoa học máy tính nhằm tạo ra các hệ thống có khả năng thực hiện các tác vụ đòi hỏi trí tuệ của con người như học hỏi, suy luận, nhận dạng hình ảnh và giải quyết vấn đề.",
-                "response_b": "Trí tuệ nhân tạo là một lĩnh vực trí tuệ nhân tạo sử dụng trí tuệ nhân tạo để làm những việc trí tuệ nhân tạo.",
-            },
-            {
-                "prompt": "Việt Nam có bao nhiêu tỉnh thành?",
-                "response_a": "Tính đến hiện tại, Việt Nam có tổng cộng 63 tỉnh và thành phố trực thuộc Trung ương (gồm 58 tỉnh và 5 thành phố trực thuộc Trung ương).",
-                "response_b": "Việt Nam có khoảng 500 tỉnh thành trên khắp thế giới.",
-            },
-        ]
+    candidate_pairs = []
+    
+    def load_pairs_from_file(filepath):
+        loaded = []
+        if os.path.exists(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        pair = extract_candidate_pair(data)
+                        if pair:
+                            loaded.append(pair)
+                    except Exception:
+                        continue
+        return loaded
 
-    total_candidates = min(len(candidate_samples), args.max_samples)
-    print(f"   Tổng số cặp cần thẩm định: {total_candidates}")
+    candidate_pairs = load_pairs_from_file(args.input_data)
+    
+    # If input_data didn't yield pairs, check dataset/dpo_vi.jsonl or auto-download
+    if not candidate_pairs:
+        dpo_default = os.path.join(os.path.dirname(args.input_data) or "dataset", "dpo_vi.jsonl")
+        print(f"   ⚡ Đầu vào chưa có cặp phản hồi đối sánh. Tìm kiếm tại {dpo_default}...")
+        candidate_pairs = load_pairs_from_file(dpo_default)
+        
+        if not candidate_pairs:
+            print("   📥 Tự động tải tập dữ liệu đối sánh 5CD-AI/Vietnamese-Intel-orca_dpo_pairs-gg-translated...")
+            try:
+                try:
+                    from data_pipeline.download_dpo import main as run_download_dpo
+                except ImportError:
+                    from download_dpo import main as run_download_dpo
+                run_download_dpo()
+                candidate_pairs = load_pairs_from_file(dpo_default)
+            except Exception as ex:
+                print(f"   ⚠️ Không thể tự động tải DPO pairs ({ex}). Sử dụng bộ mẫu đối chuẩn mặc định.")
+
+    if not candidate_pairs:
+        print(f"   ⚠️ Sử dụng mẫu minh họa kiểm thử...")
+        default_samples = [
+            ("Thủ đô của Việt Nam là gì?", "Thủ đô của Việt Nam là thành phố Hà Nội. Đây là trung tâm chính trị, văn hóa và kinh tế quan trọng của cả nước.", "Thủ đô của Pháp nằm ở Tây Ban Nha, nằm ở khu vực trung tâm của Pháp."),
+            ("Giải thích ngắn gọn Trí tuệ nhân tạo (AI) là gì?", "AI (Artificial Intelligence) là một nhánh của khoa học máy tính nhằm tạo ra các hệ thống có khả năng thực hiện các tác vụ đòi hỏi trí tuệ của con người như học hỏi, suy luận, nhận dạng hình ảnh và giải quyết vấn đề.", "Trí tuệ nhân tạo là một lĩnh vực trí tuệ nhân tạo sử dụng trí tuệ nhân tạo để làm những việc trí tuệ nhân tạo."),
+            ("Việt Nam có bao nhiêu tỉnh thành?", "Tính đến hiện tại, Việt Nam có tổng cộng 63 tỉnh và thành phố trực thuộc Trung ương (gồm 58 tỉnh và 5 thành phố trực thuộc Trung ương).", "Việt Nam có khoảng 500 tỉnh thành trên khắp thế giới."),
+        ]
+        candidate_pairs = default_samples
+
+    total_candidates = min(len(candidate_pairs), args.max_samples)
+    print(f"   Tổng số cặp hợp lệ cần thẩm định: {total_candidates}")
 
     # 3. Judge & Output DPO Dataset
     print(f"[3/3] Bắt đầu chấm điểm và phân loại chosen / rejected...")
@@ -130,13 +172,7 @@ def run_judge_pipeline(args):
     labeled_count = 0
     start_time = time.time()
 
-    for i, item in enumerate(candidate_samples[:total_candidates]):
-        prompt = item.get("prompt") or item.get("query")
-        resp_a = item.get("response_a") or item.get("candidate_1")
-        resp_b = item.get("response_b") or item.get("candidate_2")
-
-        if not prompt or not resp_a or not resp_b:
-            continue
+    for i, (prompt, resp_a, resp_b) in enumerate(candidate_pairs[:total_candidates]):
 
         user_content = f"""[CÂU HỎI]: {prompt}
 
