@@ -45,6 +45,8 @@ def get_parser():
     parser.add_argument("--intermediate_size", type=int, default=1088, help="SwiGLU intermediate dimension (~26M total params)")
     parser.add_argument("--max_seq_len", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--dropout", type=float, default=0.05, help="Dropout probability for SFT")
+    parser.add_argument("--use_moe", action="store_true", help="Enable Mixture-of-Experts architecture")
+    parser.add_argument("--num_experts", type=int, default=4, help="Number of experts if using MoE")
 
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=2, help="Number of SFT training epochs")
@@ -119,7 +121,7 @@ def train_sft(args):
         if getattr(config, "tie_word_embeddings", True):
             model.lm_head.weight = model.model.embed_tokens.weight
     else:
-        print(f"      Training SFT directly from fresh architecture (~26.2M)...")
+        print(f"      Training SFT directly from fresh architecture...")
         config = ViMindConfig(
             vocab_size=len(tokenizer),
             hidden_size=args.hidden_size,
@@ -129,6 +131,8 @@ def train_sft(args):
             intermediate_size=args.intermediate_size,
             max_position_embeddings=args.max_seq_len,
             dropout=args.dropout,
+            use_moe=args.use_moe,
+            num_experts=args.num_experts,
         )
         model = ViMindForCausalLM(config)
 

@@ -1,67 +1,40 @@
 # 🇻🇳 ViMind: Native Vietnamese Small Language Model from Scratch
 
-[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen.svg)](https://github.com/WuKong0601/ViMind/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/Release-v3.0.0-brightgreen.svg)](https://github.com/WuKong0601/ViMind/releases/tag/v3.0.0)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Compute Budget](https://img.shields.io/badge/Compute%20Budget-$0%20(Zero%20Cost)-brightgreen.svg)]()
+[![Architecture](https://img.shields.io/badge/Architecture-MoE%20198M%20%2F%20Dense%2064M-purple.svg)]()
 [![Hardware](https://img.shields.io/badge/Compute-NVIDIA%20Tesla%20T4-orange.svg)]()
-[![VRAM](https://img.shields.io/badge/VRAM%20Inference-103%20MB-blueviolet.svg)]()
+[![Judge](https://img.shields.io/badge/RLAIF%20Judge-Qwen2.5--7B--Instruct-blueviolet.svg)]()
 
 > **ViMind** là mô hình ngôn ngữ nhỏ (Small Language Model - SLM) mã nguồn mở được thiết kế, huấn luyện và căn chỉnh **100% từ đầu (from scratch)** dành riêng cho tiếng Việt với ngân sách **0 đồng ($0 compute budget)** trên hạ tầng GPU miễn phí (Kaggle Tesla T4).
 >
-> **ViMind 1.0** đánh dấu cột mốc hoàn thành trọn vẹn chu trình nghiên cứu học thuật: từ **Bộ tách từ Byte-BPE tiếng Việt bản địa (12.8k từ vựng)**, **Huấn luyện tiền kỳ (Base Pre-training)**, **Tinh chỉnh có giám sát (SFT)** với kỹ thuật che mặt nạ mất mát (Loss Masking), đến **Căn chỉnh sở thích người dùng trực tiếp (Direct Preference Optimization - DPO)**.
+> **ViMind 3.0** là bước nhảy vọt kiến trúc toàn diện:
+> 1. **Kiến trúc MoE (Mixture-of-Experts):** 198M tham số với 4 chuyên gia (Experts), kích hoạt 1 chuyên gia (64M active) mỗi token với Top-1 Gating & cân bằng tải Router Auxiliary Loss.
+> 2. **Mở rộng ngữ cảnh YaRN RoPE:** Hỗ trợ suy luận văn bản dài lên tới **32.768 tokens** (`rope_theta = 1e6`).
+> 3. **Giám khảo Offline Qwen2.5-7B-Instruct (4-bit NF4):** Đánh giá gán nhãn cặp câu trả lời RLAIF trực tiếp trên GPU không tốn phí và không bị giới hạn API rate limit.
+> 4. **Agentic Reinforcement Learning (GRPO):** Huấn luyện mô hình tự suy luận (`<think>`) và gọi công cụ chuyên dụng (`<tool_call>`) với môi trường thực thi giả lập.
+> 5. **Hệ sinh thái Triển khai Toàn diện:** Máy chủ FastAPI tương thích 100% chuẩn OpenAI API (`/v1/chat/completions`), SSE Streaming, giao diện WebUI Streamlit hiện đại.
 
 ---
 
-## 📑 Mục Lục
-1. [Điểm Nổi Bật của ViMind 1.0](#-điểm-nổi-bật-của-vimind-10)
-2. [Thông Số Kiến Trúc Mô Hình](#-thông-số-kiến-trúc-mô-hình)
-3. [Chu Trình Huấn Luyện 4 Giai Đoạn](#-chu-trình-huấn-luyện-4-giai-đoạn)
-   - [Giai đoạn 1: Bộ Tách Từ Byte-BPE Tiếng Việt](#giai-đoạn-1-bộ-tách-từ-byte-bpe-tiếng-việt)
-   - [Giai đoạn 2: Huấn Luyện Tiền Kỳ (Pre-training)](#giai-đoạn-2-huấn-luyện-tiền-kỳ-pre-training)
-   - [Giai đoạn 3: Tinh Chỉnh Hội Thoại (SFT + Loss Masking)](#giai-đoạn-3-tinh-chỉnh-hội-thoại-sft--loss-masking)
-   - [Giai đoạn 4: Căn Chỉnh Sở Thích (DPO Alignment)](#giai-đoạn-4-căn-chỉnh-sở-thích-dpo-alignment)
-4. [Dữ Liệu & Số Liệu Nghiên Cứu Viết Paper](#-dữ-liệu--số-liệu-nghiên-cứu-viết-paper)
-5. [Đánh Giá Hiệu Năng & Điểm Đo (Benchmark)](#-đánh-giá-hiệu-năng--điểm-đo-benchmark)
-6. [Cấu Trúc Thư Mục Repository](#-cấu-trúc-thư-mục-repository)
-7. [Hướng Dẫn Cài Đặt & Chạy Thử (Quickstart)](#-hướng-dẫn-cài-đặt--chạy-thử-quickstart)
-8. [Lộ Trình Phát Triển (ViMind 2.0 Roadmap)](#-lộ-trình-phát-triển-vimind-20-roadmap)
-9. [Trích Dẫn (Citation) & Giấy Phép](#-trích-dẫn-citation--giấy-phép)
+## 🏗️ Thông Số Kiến Trúc Mô Hình Qua Các Thế Hệ
 
----
-
-## 🌟 Điểm Nổi Bật của ViMind 1.0
-
-- 🇻🇳 **Native Vietnamese Byte-BPE Tokenizer**: Bộ từ vựng 12.800 tokens tối ưu hóa cho âm tiết, dấu thanh và chuẩn Unicode NFC tiếng Việt. Giảm thiểu 3 lần số lượng token so với các tokenizer đa ngữ của LLaMA/GPT, loại bỏ hoàn toàn hiện tượng phân mảnh ký tự UTF-8.
-- ⚡ **Siêu Nhẹ & Tiết Kiệm Tài Nguyên**: Kích thước ~26.2M tham số, chỉ chiếm **103 MB VRAM** khi suy luận. Có thể chạy mượt mà trên CPU laptop phổ thông, thiết bị nhúng (Raspberry Pi, điện thoại di động).
-- 🧬 **Kiến Trúc LLaMA-3 Chuẩn Mực Hiện Đại**:
-  - **RMSNorm**: Ổn định gradient trong quá trình huấn luyện 16-bit.
-  - **Rotary Position Embedding (RoPE)** ($\theta = 10.000$): Tăng cường năng lực định vị tương đối cho ngữ cảnh dài.
-  - **SwiGLU Activation**: Nâng cao tính phi tuyến và khả năng biểu diễn ngữ nghĩa.
-  - **Grouped-Query Attention (GQA)** (8 Query Heads : 4 Key-Value Heads, tỷ lệ 2:1): Giảm 50% dung lượng bộ nhớ đệm KV trong quá trình sinh token.
-  - **Tied Word Embeddings**: Khóa ma trận nhúng đầu vào và đầu ra, giảm mạnh số lượng tham số lưu trữ mà vẫn duy trì chất lượng biểu diễn.
-- 🎯 **Căn Chỉnh Tinh Chế Với DPO (Direct Preference Optimization)**:
-  - Ứng dụng công thức Rafailov et al. (NeurIPS 2023) với mô hình tham chiếu đóng băng (frozen reference model).
-  - Độ chính xác sở thích (Reward Accuracy) đạt **85.4%**, biên độ thưởng (Reward Margin) đạt **+12.18**.
-- 🔬 **Minh Bạch & Tái Hiện 100%**: Mã nguồn PyTorch thuần, không phụ thuộc thư viện đóng gói đen (black-box frameworks). Toàn bộ log huấn luyện và metrics được lưu trữ có hệ thống phục vụ công tác nghiên cứu học thuật.
-
----
-
-## 🏗️ Thông Số Kiến Trúc Mô Hình
-
-| Đặc Tính Kỹ Thuật | ViMind 1.0 (Hiện Tại) | ViMind 2.0 (Dự Kiến) |
-| :--- | :--- | :--- |
-| **Tổng số tham số (Total Params)** | **26.207.488 (~26.2M)** | **~65M - 104M** |
-| **Kích thước ẩn ($d_{model}$)** | 512 | 768 |
-| **Kích thước trung gian FFN ($d_{ffn}$)**| 1.376 ($8/3 \times d_{model}$) | 2.048 |
-| **Số tầng Transformer (Layers)** | 8 | 12 - 16 |
-| **Số đầu Attention ($n_{heads}$)** | 8 | 12 |
-| **Số đầu Key-Value ($n_{kv}$ - GQA)** | 4 (GQA 2:1) | 4 (GQA 3:1) |
-| **Kích thước từ vựng (Vocab Size)** | 12.800 (Byte-BPE) | 16.000 (Byte-BPE) |
-| **Chiều dài ngữ cảnh tối đa ($L_{max}$)**| 512 tokens | 1.024 tokens |
-| **VRAM khi suy luận (Inference VRAM)** | **103.0 MB** | ~250 MB |
-| **Tốc độ sinh chữ (Tesla T4)** | **~75.3 tokens/giây** | ~60.0 tokens/giây |
+| Đặc Tính Kỹ Thuật | ViMind 1.0 (Base) | ViMind 2.0 (Dense) | ViMind 3.0 (MoE Mới Nhất) |
+| :--- | :--- | :--- | :--- |
+| **Kiến Trúc** | Dense CausalLM | Dense CausalLM + LoRA | **Mixture-of-Experts (MoE)** |
+| **Tổng số tham số** | **26.2M** | **62.8M** | **198.3M** |
+| **Tham số kích hoạt / token** | 26.2M | 62.8M | **64.1M (Top-1 Expert)** |
+| **Số chuyên gia (Experts)** | 1 (Dense) | 1 (Dense) | **4 Experts (Top-1 Routing)** |
+| **Kích thước ẩn ($d_{model}$)** | 512 | 640 | 640 |
+| **Kích thước FFN ($d_{ffn}$)**| 1.376 | 1.792 | 1.792 per Expert |
+| **Số tầng Transformer** | 8 | 12 | 12 (MoE Feed-Forward) |
+| **Số đầu Attention ($n_{heads}$)** | 8 | 10 | 10 (GQA 10:5) |
+| **Ngữ cảnh tối đa ($L_{max}$)**| 512 tokens | 1.024 tokens | **32.768 tokens (YaRN RoPE)** |
+| **Tokens đặc biệt** | Chuẩn ChatML | Chuẩn ChatML | `<think>`, `</think>`, `<tool_call>`, `</tool_call>` |
+| **VRAM khi suy luận** | **103 MB** | **~245 MB** | **~260 MB (MoE Top-1)** |
+| **Tốc độ sinh chữ (T4)** | ~75 tok/s | ~62 tok/s | **~58 tok/s** |
 
 ---
 
@@ -270,8 +243,46 @@ Mục tiêu tiếp theo sau cột mốc ViMind 1.0 là phát triển **ViMind 2.
   - Thuật toán Group Relative Policy Optimization không cần mạng Critic, chuẩn hóa Advantage theo nhóm mẫu sinh, hỗ trợ Chain-of-Thought (`<think>...</think>`) và phạt lặp từ (`trainer/train_grpo.py`).
 - [x] **Công cụ đánh giá & đo tốc độ suy luận trực tiếp**:
   - `eval_llm.py` hỗ trợ TextStreamer, đo tốc độ sinh token (tokens/s), hot-swap LoRA adapters và tương tác CLI.
-- [ ] **Mở rộng ngữ cảnh & Nghiên cứu tiếp theo**:
+- [x] **Mở rộng ngữ cảnh & Nghiên cứu tiếp theo**:
   - Đánh giá năng lực suy luận toán & tiếng Việt của mô hình 64M sau khi hoàn thành chu kỳ Pre-train / SFT / GRPO.
+
+---
+
+## ⚡ Hướng Dẫn Sử Dụng Hệ Sinh Thái ViMind 3.0
+
+### 1. Khởi chạy Máy chủ Tương thích OpenAI API (FastAPI)
+ViMind 3.0 cung cấp endpoint `/v1/chat/completions` chuẩn OpenAI, tương thích sẵn với Open-WebUI, Cherry Studio, LibreChat, NextChat:
+```bash
+python scripts/serve_openai_api.py --model_path out/sft_moe --port 8000 --device cuda
+```
+
+### 2. Tương tác Trực tiếp & Thử nghiệm Gọi Công cụ (Client CLI)
+Chạy giao diện dòng lệnh tương tác với hỗ trợ streaming và tự động thực thi công cụ (Toán học, Thời tiết, Thời gian):
+```bash
+# Trò chuyện tương tác với chức năng gọi công cụ (Tool Call)
+python scripts/chat_api.py --enable_tools
+
+# Kiểm tra câu hỏi đơn lẻ
+python scripts/chat_api.py --prompt "Thời tiết ở Đà Nẵng hôm nay thế nào?" --enable_tools
+```
+
+### 3. Đánh giá Benchmark Năng lực Gọi Công cụ (Tool Call Benchmark)
+Đo lường độ chính xác chọn hàm, độ hợp lệ cú pháp JSON và tỷ lệ thu hồi lệnh gọi:
+```bash
+python scripts/eval_toolcall.py --model_path out/sft_moe
+```
+
+### 4. Đóng gói & Xuất xưởng Trọng số Hugging Face SafeTensors
+Hợp nhất LoRA, đóng gói SafeTensors, tokenizer và template trò chuyện 3.0:
+```bash
+python scripts/convert_model.py --input out/agent_rl/vimind_3.0_agent.pth --output out/vimind_3.0_hf --moe --num_experts 4
+```
+
+### 5. Giao diện WebUI Trực quan (Streamlit)
+Trải nghiệm giao diện Web hiện đại hỗ trợ xem chi tiết luồng suy nghĩ (`<think>`) và kết quả gọi công cụ:
+```bash
+streamlit run app.py
+```
 
 ---
 

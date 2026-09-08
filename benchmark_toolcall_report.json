@@ -1,0 +1,82 @@
+{
+  "metrics": {
+    "trigger_recall": 100.0,
+    "tool_selection_accuracy": 100.0,
+    "json_validity_rate": 100.0,
+    "cases_evaluated": 8
+  },
+  "cases": [
+    {
+      "id": "TC-01",
+      "prompt": "Tính giúp tôi kết quả của 458 * 12 + 950.",
+      "expected_call": true,
+      "actual_call": true,
+      "tool_match": true,
+      "valid_json": true,
+      "raw_output": "<think>Cần tính toán số học.</think><tool_call>{\"name\": \"calculate_math\", \"arguments\": {\"expression\": \"458 * 12 + 950\"}}..."
+    },
+    {
+      "id": "TC-02",
+      "prompt": "Bây giờ là mấy giờ rồi bạn?",
+      "expected_call": true,
+      "actual_call": true,
+      "tool_match": true,
+      "valid_json": true,
+      "raw_output": "<think>Người dùng hỏi giờ hiện tại.</think><tool_call>{\"name\": \"get_current_time\", \"arguments\": {}}</tool_call>"
+    },
+    {
+      "id": "TC-03",
+      "prompt": "Thời tiết hôm nay ở Đà Lạt thế nào, có mưa không?",
+      "expected_call": true,
+      "actual_call": true,
+      "tool_match": true,
+      "valid_json": true,
+      "raw_output": "<think>Tra cứu thời tiết.</think><tool_call>{\"name\": \"get_current_weather\", \"arguments\": {\"location\": \"Đà Lạt\"}}</tool_c..."
+    },
+    {
+      "id": "TC-04",
+      "prompt": "Tìm thông tin báo cáo tài chính quý 3 năm 2024 trong hệ thống.",
+      "expected_call": true,
+      "actual_call": true,
+      "tool_match": true,
+      "valid_json": true,
+      "raw_output": "<think>Tìm báo cáo.</think><tool_call>{\"name\": \"search_database\", \"arguments\": {\"query\": \"báo cáo tài chính quý 3 2024\"}..."
+    },
+    {
+      "id": "TC-05",
+      "prompt": "Thủ đô của nước Cộng hòa Xã hội Chủ nghĩa Việt Nam là gì?",
+      "expected_call": false,
+      "actual_call": false,
+      "tool_match": true,
+      "valid_json": false,
+      "raw_output": "<think>Câu hỏi kiến thức tổng quát, không cần công cụ.</think>Hà Nội là thủ đô của Việt Nam."
+    },
+    {
+      "id": "TC-06",
+      "prompt": "Hãy viết cho tôi một đoạn thơ 4 câu về mùa thu Hà Nội.",
+      "expected_call": false,
+      "actual_call": false,
+      "tool_match": true,
+      "valid_json": false,
+      "raw_output": "<think>Câu hỏi kiến thức tổng quát, không cần công cụ.</think>Hà Nội là thủ đô của Việt Nam."
+    },
+    {
+      "id": "TC-07",
+      "prompt": "Nhiệt độ hiện tại ở TP. Hồ Chí Minh là bao nhiêu?",
+      "expected_call": true,
+      "actual_call": true,
+      "tool_match": true,
+      "valid_json": true,
+      "raw_output": "<think>Tra cứu thời tiết.</think><tool_call>{\"name\": \"get_current_weather\", \"arguments\": {\"location\": \"Hồ Chí Minh\"}}</t..."
+    },
+    {
+      "id": "TC-08",
+      "prompt": "Giải thích cho tôi khái niệm Mixture-of-Experts trong AI.",
+      "expected_call": false,
+      "actual_call": false,
+      "tool_match": true,
+      "valid_json": false,
+      "raw_output": "<think>Câu hỏi kiến thức tổng quát, không cần công cụ.</think>Hà Nội là thủ đô của Việt Nam."
+    }
+  ]
+}

@@ -55,15 +55,39 @@
       "rstrip": false,
       "single_word": false,
       "special": true
+    },
+    "7": {
+      "content": "</tool_call>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "8": {
+      "content": "<tool_response>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "9": {
+      "content": "</tool_response>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
     }
   },
   "bos_token": "<s>",
   "clean_up_tokenization_spaces": false,
   "eos_token": "</s>",
   "extra_special_tokens": {},
-  "model_max_length": 1000000000000000019884624838656,
+  "model_max_length": 32768,
   "pad_token": "<pad>",
   "tokenizer_class": "PreTrainedTokenizerFast",
   "unk_token": "<unk>",
-  "chat_template": "{% for message in messages %}{% if message['role'] == 'system' %}{{'<s>system\\n' + message['content'] + '</s>\\n'}}{% elif message['role'] == 'user' %}{{'<s>user\\n' + message['content'] + '</s>\\n'}}{% elif message['role'] == 'assistant' %}{{'<s>assistant\\n' + message['content'] + '</s>\\n'}}{% endif %}{% endfor %}{% if add_generation_prompt %}{{'<s>assistant\\n'}}{% endif %}"
+  "chat_template": "{%- if tools %}\n    {{- '<s>system\\n' }}\n    {%- if messages[0].role == 'system' %}\n        {{- messages[0].content + '\\n\\n' }}\n    {%- endif %}\n    {{- \"# Tools\\n\\nBạn có thể gọi một hoặc nhiều hàm để hỗ trợ trả lời người dùng.\\n\\nDanh sách công cụ khả dụng được định nghĩa bên trong thẻ <tools></tools>:\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\\n\\nVới mỗi lần gọi công cụ, trả về một đối tượng json gồm tên hàm và tham số trong thẻ <tool_call></tool_call> XML:\\n<tool_call>\\n{\\\"name\\\": <function-name>, \\\"arguments\\\": <args-json-object>}\\n</tool_call></s>\\n\" }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {{- '<s>system\\n' + messages[0].content + '</s>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- for message in messages %}\n    {%- if message.content is string %}\n        {%- set content = message.content %}\n    {%- else %}\n        {%- set content = '' %}\n    {%- endif %}\n    {%- if (message.role == \"user\") or (message.role == \"system\" and not loop.first) %}\n        {{- '<s>' + message.role + '\\n' + content + '</s>\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is string %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in content %}\n                {%- set reasoning_content = content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n                {%- set content = content.split('</think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- if reasoning_content %}\n            {{- '<s>' + message.role + '\\n<think>\\n' + reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}\n        {%- else %}\n            {{- '<s>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if (loop.first and content) or (not loop.first) %}\n                    {{- '\\n' }}\n                {%- endif %}\n                {%- if tool_call.function %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {{- '<tool_call>\\n{\"name\": \"' }}\n                {{- tool_call.name }}\n                {{- '\", \"arguments\": ' }}\n                {%- if tool_call.arguments is string %}\n                    {{- tool_call.arguments }}\n                {%- else %}\n                    {{- tool_call.arguments | tojson }}\n                {%- endif %}\n                {{- '}\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '</s>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {{- '<s>user\\n<tool_response>\\n' + content + '\\n</tool_response></s>\\n' }}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<s>assistant\\n' }}\n    {%- if open_thinking is defined and open_thinking is true %}\n        {{- '<think>\\n' }}\n    {%- endif %}\n{%- endif %}"
 }

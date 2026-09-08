@@ -16,8 +16,15 @@ from model.model import ViMindForCausalLM
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-ckpt_sft = "out/sft/vimind_sft_final"
-ckpt_dpo = "out/dpo/vimind_dpo_final"
+ckpt_candidates = [
+    ("out/vimind_3.0_hf", "VIMIND 3.0 (MoE Final)"),
+    ("out/agent_rl", "VIMIND 3.0 (Agentic RL)"),
+    ("out/sft_moe", "VIMIND 3.0 (SFT MoE)"),
+    ("out/dpo/vimind_64m_dpo_final", "VIMIND 2.0 (64M DPO)"),
+    ("out/sft/vimind_64m_sft_final", "VIMIND 2.0 (64M SFT)"),
+    ("out/dpo/vimind_dpo_final", "VIMIND 1.0 (DPO FINAL)"),
+    ("out/sft/vimind_sft_final", "VIMIND 1.0 (SFT FINAL)"),
+]
 
 tokenizer = AutoTokenizer.from_pretrained("model")
 
@@ -27,7 +34,7 @@ test_prompts = [
     "Học máy là gì?"
 ]
 
-for ckpt_path, label in [(ckpt_sft, "SFT FINAL"), (ckpt_dpo, "VIMIND 1.0 (DPO FINAL)")]:
+for ckpt_path, label in ckpt_candidates:
     if not os.path.exists(ckpt_path):
         print(f"Skipping {label}, path not found: {ckpt_path}")
         continue

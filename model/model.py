@@ -31,6 +31,14 @@ class ViMindConfig(PretrainedConfig):
         pad_token_id: int = 0,
         hidden_act: str = "silu",
         flash_attn: bool = True,
+        use_moe: bool = False,
+        num_experts: int = 4,
+        num_experts_per_tok: int = 1,
+        moe_intermediate_size: Optional[int] = None,
+        norm_topk_prob: bool = True,
+        router_aux_loss_coef: float = 5e-4,
+        inference_rope_scaling: bool = False,
+        rope_scaling: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(
@@ -54,6 +62,28 @@ class ViMindConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.flash_attn = flash_attn
 
+        # MoE configurations
+        self.use_moe = use_moe
+        self.num_experts = num_experts
+        self.num_experts_per_tok = num_experts_per_tok
+        self.moe_intermediate_size = moe_intermediate_size or intermediate_size
+        self.norm_topk_prob = norm_topk_prob
+        self.router_aux_loss_coef = router_aux_loss_coef
+
+        # Long-context YaRN RoPE scaling configurations
+        self.inference_rope_scaling = inference_rope_scaling
+        if self.inference_rope_scaling and rope_scaling is None:
+            self.rope_scaling = {
+                "type": "yarn",
+                "factor": 16,
+                "original_max_position_embeddings": 2048,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "attention_factor": 1.0,
+            }
+        else:
+            self.rope_scaling = rope_scaling
+
     @classmethod
     def get_config_26m(cls, vocab_size: int = 12800, **kwargs):
         """ViMind 1.0 (26.2M parameter baseline, 8 layers, 512 dim)"""
@@ -70,7 +100,7 @@ class ViMindConfig(PretrainedConfig):
 
     @classmethod
     def get_config_64m(cls, vocab_size: int = 12800, **kwargs):
-        """ViMind 2.0 (62.8M parameters, deeper 12 layers, 640 dim, 1024 context)"""
+        """ViMind 2.0 / 3.0 Dense (62.8M parameters, 12 layers, 640 dim, 2048 context, rope_theta 1e6)"""
         return cls(
             vocab_size=vocab_size,
             hidden_size=640,
@@ -78,13 +108,32 @@ class ViMindConfig(PretrainedConfig):
             num_attention_heads=10,
             num_key_value_heads=5,
             intermediate_size=1728,
-            max_position_embeddings=1024,
+            max_position_embeddings=2048,
+            rope_theta=1e6,
+            **kwargs,
+        )
+
+    @classmethod
+    def get_config_moe_198m(cls, vocab_size: int = 12800, **kwargs):
+        """ViMind 3.0 MoE (198M total params, 64M active per token, 4 experts, 12 layers, 640 dim)"""
+        return cls(
+            vocab_size=vocab_size,
+            hidden_size=640,
+            num_hidden_layers=12,
+            num_attention_heads=10,
+            num_key_value_heads=5,
+            intermediate_size=1728,
+            use_moe=True,
+            num_experts=4,
+            num_experts_per_tok=1,
+            max_position_embeddings=2048,
+            rope_theta=1e6,
             **kwargs,
         )
 
     @classmethod
     def get_config_104m(cls, vocab_size: int = 12800, **kwargs):
-        """ViMind 2.0 Plus (104M parameters, 16 layers, 768 dim, 1024 context)"""
+        """ViMind 2.0 Plus (104M parameters, 16 layers, 768 dim, 2048 context)"""
         return cls(
             vocab_size=vocab_size,
             hidden_size=768,
@@ -92,7 +141,8 @@ class ViMindConfig(PretrainedConfig):
             num_attention_heads=12,
             num_key_value_heads=4,
             intermediate_size=2048,
-            max_position_embeddings=1024,
+            max_position_embeddings=2048,
+            rope_theta=1e6,
             **kwargs,
         )
 
@@ -116,13 +166,38 @@ class RMSNorm(nn.Module):
         return output * self.weight
 
 
-def precompute_freqs_cis(dim: int, end: int = 2048, theta: float = 10000.0):
-    """Precomputes Rotary Position Embeddings (RoPE) frequencies."""
+def precompute_freqs_cis(
+    dim: int,
+    end: int = 2048,
+    theta: float = 1000000.0,
+    rope_scaling: Optional[dict] = None,
+):
+    """Precomputes Rotary Position Embeddings (RoPE) frequencies with optional YaRN scaling."""
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    attn_factor = 1.0
+
+    if rope_scaling is not None and rope_scaling.get("type") == "yarn":
+        orig_max = rope_scaling.get("original_max_position_embeddings", 2048)
+        factor = rope_scaling.get("factor", 16)
+        beta_fast = rope_scaling.get("beta_fast", 32.0)
+        beta_slow = rope_scaling.get("beta_slow", 1.0)
+        attn_factor = rope_scaling.get("attention_factor", 1.0)
+
+        if end / orig_max > 1.0:
+            inv_dim = lambda b: (dim * math.log(orig_max / (b * 2 * math.pi))) / (2 * math.log(theta))
+            low = max(math.floor(inv_dim(beta_fast)), 0)
+            high = min(math.ceil(inv_dim(beta_slow)), dim // 2 - 1)
+            ramp = torch.clamp(
+                (torch.arange(dim // 2, device=freqs.device).float() - low) / max(high - low, 0.001),
+                0.0,
+                1.0,
+            )
+            freqs = freqs * (1.0 - ramp + ramp / factor)
+
     t = torch.arange(end, device=freqs.device)
     freqs = torch.outer(t, freqs).float()
-    freqs_cos = torch.cat([torch.cos(freqs), torch.cos(freqs)], dim=-1)
-    freqs_sin = torch.cat([torch.sin(freqs), torch.sin(freqs)], dim=-1)
+    freqs_cos = torch.cat([torch.cos(freqs), torch.cos(freqs)], dim=-1) * attn_factor
+    freqs_sin = torch.cat([torch.sin(freqs), torch.sin(freqs)], dim=-1) * attn_factor
     return freqs_cos, freqs_sin
 
 
@@ -237,13 +312,14 @@ class Attention(nn.Module):
 
 
 class FeedForward(nn.Module):
-    """SwiGLU Multi-Layer Perceptron (as used in LLaMA-3 / Mistral)."""
+    """SwiGLU Multi-Layer Perceptron (as used in LLaMA-3 / Mistral / Qwen)."""
 
-    def __init__(self, config: ViMindConfig):
+    def __init__(self, config: ViMindConfig, intermediate_size: Optional[int] = None):
         super().__init__()
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        inter_dim = intermediate_size or config.intermediate_size
+        self.gate_proj = nn.Linear(config.hidden_size, inter_dim, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, inter_dim, bias=False)
+        self.down_proj = nn.Linear(inter_dim, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -251,8 +327,57 @@ class FeedForward(nn.Module):
         return self.dropout(self.down_proj(F.silu(self.gate_proj(x)) * self.up_proj(x)))
 
 
+class MOEFeedForward(nn.Module):
+    """Mixture-of-Experts (MoE) FeedForward module with top-k gating & load balancing loss."""
+
+    def __init__(self, config: ViMindConfig):
+        super().__init__()
+        self.config = config
+        self.num_experts = config.num_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
+        self.norm_topk_prob = config.norm_topk_prob
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        inter_dim = config.moe_intermediate_size or config.intermediate_size
+
+        self.gate = nn.Linear(config.hidden_size, self.num_experts, bias=False)
+        self.experts = nn.ModuleList([
+            FeedForward(config, intermediate_size=inter_dim)
+            for _ in range(self.num_experts)
+        ])
+        self.aux_loss = torch.tensor(0.0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        bsz, seq_len, hidden_dim = x.shape
+        x_flat = x.view(-1, hidden_dim)
+
+        scores = F.softmax(self.gate(x_flat), dim=-1)
+        topk_weight, topk_idx = torch.topk(scores, k=self.num_experts_per_tok, dim=-1, sorted=False)
+
+        if self.norm_topk_prob:
+            topk_weight = topk_weight / (topk_weight.sum(dim=-1, keepdim=True) + 1e-20)
+
+        y = torch.zeros_like(x_flat)
+        for i, expert in enumerate(self.experts):
+            mask = (topk_idx == i)
+            if mask.any():
+                token_idx = mask.any(dim=-1).nonzero().flatten()
+                weight = topk_weight[mask].view(-1, 1)
+                y.index_add_(0, token_idx, (expert(x_flat[token_idx]) * weight).to(y.dtype))
+            elif self.training:
+                # Keep parameter nodes in computational graph for DDP gradient sync
+                y[0, 0] = y[0, 0] + 0.0 * sum(p.sum() for p in expert.parameters())
+
+        if self.training and self.router_aux_loss_coef > 0:
+            load = F.one_hot(topk_idx, self.num_experts).float().mean(0)
+            self.aux_loss = (load * scores.mean(0)).sum() * self.num_experts * self.router_aux_loss_coef
+        else:
+            self.aux_loss = scores.new_zeros(1).squeeze()
+
+        return y.view(bsz, seq_len, hidden_dim)
+
+
 class ViMindBlock(nn.Module):
-    """Transformer Decoder Block with Pre-RMSNorm."""
+    """Transformer Decoder Block with Pre-RMSNorm and Dense/MoE MLP."""
 
     def __init__(self, layer_id: int, config: ViMindConfig):
         super().__init__()
@@ -260,7 +385,7 @@ class ViMindBlock(nn.Module):
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.self_attn = Attention(config)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = FeedForward(config)
+        self.mlp = MOEFeedForward(config) if config.use_moe else FeedForward(config)
 
     def forward(
         self,
@@ -309,6 +434,7 @@ class ViMindModel(nn.Module):
             dim=config.head_dim,
             end=config.max_position_embeddings,
             theta=config.rope_theta,
+            rope_scaling=config.rope_scaling,
         )
         self.register_buffer("freqs_cos", freqs_cos, persistent=False)
         self.register_buffer("freqs_sin", freqs_sin, persistent=False)
@@ -319,6 +445,7 @@ class ViMindModel(nn.Module):
             dim=self.config.head_dim,
             end=self.config.max_position_embeddings,
             theta=self.config.rope_theta,
+            rope_scaling=self.config.rope_scaling,
         )
         self.freqs_cos = freqs_cos.to(device)
         self.freqs_sin = freqs_sin.to(device)
@@ -448,6 +575,10 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states)
 
         loss = None
+        aux_loss = None
+        if getattr(self.config, "use_moe", False):
+            aux_loss = sum(getattr(layer.mlp, "aux_loss", 0.0) for layer in self.model.layers if hasattr(layer, "mlp"))
+
         if labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
@@ -461,13 +592,18 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
                     shift_labels.view(-1),
                     ignore_index=-100,
                 )
+            if aux_loss is not None:
+                loss = loss + aux_loss
 
-        return CausalLMOutputWithPast(
+        output = CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=presents if use_cache else None,
             hidden_states=hidden_states,
         )
+        if aux_loss is not None:
+            output.aux_loss = aux_loss
+        return output
 
     @torch.inference_mode()
     def generate(
