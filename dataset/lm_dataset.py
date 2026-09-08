@@ -171,8 +171,20 @@ class DPODataset(Dataset):
 
     def __getitem__(self, index):
         sample = self.samples[index]
+        prompt = sample.get("prompt") or sample.get("question") or ""
         chosen_conv = sample.get("chosen", [])
         rejected_conv = sample.get("rejected", [])
+
+        if isinstance(chosen_conv, str):
+            chosen_conv = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": chosen_conv},
+            ]
+        if isinstance(rejected_conv, str):
+            rejected_conv = [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": rejected_conv},
+            ]
 
         chosen_input_ids, chosen_labels = self._process_item(chosen_conv)
         rejected_input_ids, rejected_labels = self._process_item(rejected_conv)
