@@ -609,7 +609,7 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             output.aux_loss = aux_loss
         return output
 
-    @torch.inference_mode()
+    @torch.no_grad()
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,

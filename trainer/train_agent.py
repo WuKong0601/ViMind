@@ -327,7 +327,7 @@ def train_agent(args):
                 batch_rewards.append(R)
 
                 # Policy gradient loss step (GRPO-style advantage weighting)
-                full_ids = gen_tokens
+                full_ids = gen_tokens.clone().detach()
                 outputs = model(full_ids, labels=full_ids)
                 # Maximize reward -> minimize -R * log_prob
                 loss = outputs.loss * (-R if R < 0 else 1.0 / (R + 1.0))
