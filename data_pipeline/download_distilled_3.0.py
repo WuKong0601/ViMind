@@ -154,7 +154,10 @@ def build_v3_datasets(output_dir="dataset"):
         if not os.path.exists(existing_sft):
             print("⚡ Chưa tìm thấy dataset/sft_vi.jsonl. Tự động tải 5CD-AI/Vietnamese-alpaca-gpt4-gg-translated...")
             try:
-                from download_sft import main as run_download_sft
+                try:
+                    from data_pipeline.download_sft import main as run_download_sft
+                except ImportError:
+                    from download_sft import main as run_download_sft
                 run_download_sft()
             except Exception as e:
                 print(f"⚠️ Lỗi khi tải dataset Alpaca ({e}). Thử gọi qua datasets thư viện trực tiếp...")
