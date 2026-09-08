@@ -439,11 +439,12 @@ class ViMindModel(nn.Module):
         self.register_buffer("freqs_cos", freqs_cos, persistent=False)
         self.register_buffer("freqs_sin", freqs_sin, persistent=False)
 
-    def _init_rope(self, device: torch.device):
+    def _init_rope(self, device: torch.device, max_pos: Optional[int] = None):
         """Recomputes RoPE tables on the target device to guarantee finite, valid tables."""
+        end = max(max_pos or 0, getattr(self.config, "max_position_embeddings", 2048), 2048)
         freqs_cos, freqs_sin = precompute_freqs_cis(
             dim=self.config.head_dim,
-            end=self.config.max_position_embeddings,
+            end=end,
             theta=self.config.rope_theta,
             rope_scaling=self.config.rope_scaling,
         )
@@ -465,17 +466,20 @@ class ViMindModel(nn.Module):
         # Embedding lookup
         hidden_states = self.dropout(self.embed_tokens(input_ids))
 
-        # Robust self-healing RoPE tables: guarantee valid, non-meta, non-zero values on correct device
+        # Robust self-healing & dynamic-extending RoPE tables: guarantee valid, sufficient length
+        required_len = start_pos + seq_len
         if (
             not hasattr(self, "freqs_cos")
             or self.freqs_cos is None
             or self.freqs_cos.device != hidden_states.device
             or self.freqs_cos.device.type == "meta"
             or self.freqs_cos.numel() == 0
+            or self.freqs_cos.shape[0] < required_len
             or self.freqs_cos[0, 0] != 1.0
             or torch.isnan(self.freqs_cos[0, 0])
         ):
-            self._init_rope(hidden_states.device)
+            target_len = max(required_len, getattr(self.config, "max_position_embeddings", 2048), 2048)
+            self._init_rope(hidden_states.device, max_pos=target_len)
 
         position_embeddings = (
             self.freqs_cos[start_pos : start_pos + seq_len],

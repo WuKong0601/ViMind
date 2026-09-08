@@ -44,9 +44,18 @@ def convert_and_export(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # 1. Prepare ViMind Config
+    # 1. Config selection & vocab size detection
+    vocab_size = 12800
+    if os.path.exists("model/tokenizer_config.json") or os.path.exists("model/tokenizer.json"):
+        try:
+            tok = AutoTokenizer.from_pretrained("model")
+            vocab_size = max(len(tok), 12800)
+        except Exception:
+            pass
+
     if is_moe:
         config = ViMindConfig(
+            vocab_size=vocab_size,
             use_moe=True,
             num_experts=num_experts,
             num_experts_per_tok=1,
@@ -55,13 +64,14 @@ def convert_and_export(
         )
     else:
         config = ViMindConfig(
+            vocab_size=vocab_size,
             use_moe=False,
             max_seq_len=2048,
             rope_theta=1e6
         )
 
     # 2. Instantiate Model
-    print("Initializing ViMind model architecture...")
+    print(f"Initializing ViMind model architecture (Vocab: {config.vocab_size})...")
     model = ViMindForCausalLM(config)
 
     # 3. Locate & Load base weights
@@ -109,6 +119,14 @@ def convert_and_export(
         if "model" in state_dict and isinstance(state_dict["model"], dict):
             state_dict = state_dict["model"]
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+
+        # Auto-align vocab size from checkpoint
+        embed_key = next((k for k in ["model.embed_tokens.weight", "embed_tokens.weight"] if k in state_dict), None)
+        if embed_key is not None:
+            ckpt_vocab_size = state_dict[embed_key].shape[0]
+            if model.config.vocab_size != ckpt_vocab_size:
+                print(f"[Info] Aligning model vocab size from {model.config.vocab_size} to {ckpt_vocab_size} to match checkpoint...")
+                model.resize_token_embeddings(ckpt_vocab_size, mean_resizing=False)
 
         missing, unexpected = model.load_state_dict(state_dict, strict=False)
         print(f"Base weights loaded successfully. Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
