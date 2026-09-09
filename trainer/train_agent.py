@@ -350,6 +350,8 @@ def train_agent(args):
     print(f"\n🎉 Agentic RL Hoàn thành! Đang lưu mô hình ra: {final_save_dir} & {pth_save_path}...")
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    model.save_pretrained(args.save_dir)
+    tokenizer.save_pretrained(args.save_dir)
     torch.save(model.state_dict(), pth_save_path)
     print("✅ Mô hình Agent ViMind 3.0 đã sẵn sàng xuất xưởng!")
 

@@ -32,6 +32,11 @@ out/
 dataset/*.jsonl
 dataset/*.json
 !dataset/sample_*.jsonl
+!dataset/dpo_qwen_judged.jsonl
+!dataset/dpo_qwen_judged_clean.jsonl
+!dataset/identity_and_vietnam_facts.jsonl
+!dataset/sft_reasoning_vi.jsonl
+!dataset/sft_toolcall_vi.jsonl
 data_pipeline/raw/
 data_pipeline/processed/
 

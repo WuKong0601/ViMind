@@ -288,6 +288,8 @@ def train_sft(args):
     os.makedirs(final_save_dir, exist_ok=True)
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    model.save_pretrained(args.save_dir)
+    tokenizer.save_pretrained(args.save_dir)
     torch.save(model.state_dict(), pth_save_path)
     print("✅ SFT Model weights and tokenizer saved successfully!")
 
