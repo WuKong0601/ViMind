@@ -24,7 +24,7 @@ from model.model import ViMindConfig, ViMindForCausalLM
 
 # Set Streamlit Page Configuration
 st.set_page_config(
-    page_title="ViMind 3.0: Trợ Lý AI Tiếng Việt",
+    page_title="ViMind 4.0: Trợ Lý AI Tiếng Việt",
     page_icon="🇻🇳",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -89,8 +89,12 @@ st.markdown(
 )
 
 CANDIDATES_CKPT = [
+    "kaggle_logs_v18/vimind_3.0_moe_final",
+    "out/vimind_4.0_moe_final",
+    "out/agent_rl/vimind_4.0_agent_final",
+    "out/sft_moe/vimind_4.0_moe_final",
+    "out/pretrain/vimind_4.0_base_final",
     "out/vimind_3.0_hf",
-    "kaggle_logs_v14/vimind_3.0_moe_final",
     "out/agent_rl/vimind_3.0_agent_final",
     "out/agent_rl",
     "out/sft_moe/vimind_3.0_moe_final",
@@ -245,8 +249,9 @@ with st.sidebar:
     enable_tools = st.toggle("🛠️ Kích hoạt Gọi công cụ (Tool Call)", value=True, help="Tự động nhận diện và gọi các công cụ Toán học, Thời tiết, Thời gian.")
 
     st.markdown("### 🎛️ Siêu Tham Số Sinh Chữ")
-    temperature = st.slider("Temperature (Độ sáng tạo)", 0.1, 1.5, 0.6, 0.05)
+    temperature = st.slider("Temperature (Độ sáng tạo)", 0.1, 1.5, 0.7, 0.05)
     top_p = st.slider("Top-P (Nucleus Sampling)", 0.1, 1.0, 0.85, 0.05)
+    repetition_penalty = st.slider("Repetition Penalty (Chống lặp từ)", 1.0, 2.0, 1.2, 0.05, help="Giá trị >= 1.15 giúp loại bỏ hoàn toàn hiện tượng lặp từ.")
     max_tokens = st.slider("Max New Tokens", 64, 2048, 512, 64)
 
     st.divider()
@@ -256,11 +261,11 @@ with st.sidebar:
 
 
 # Main Chat Interface Header
-st.markdown("<div class='main-title'>🇻🇳 ViMind 3.0</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'>🇻🇳 ViMind 4.0</div>", unsafe_allow_html=True)
 st.markdown(
-    "<span class='badge-moe'>MoE 198M / 64M Active</span>"
-    "<span class='badge-rl'>RLAIF & Agentic GRPO</span>"
-    "<div class='sub-title'>Mô hình SLM Tiếng Việt đỉnh cao: Lý luận từng bước (CoT), Gọi công cụ thông minh, Chống ảo giác.</div>",
+    "<span class='badge-moe'>MoE 198M / Top-2 Routing</span>"
+    "<span class='badge-rl'>Pre-trained & RLAIF GRPO</span>"
+    "<div class='sub-title'>Mô hình SLM Tiếng Việt đỉnh cao: Lý luận từng bước (CoT), Gọi công cụ thông minh, Triệt tiêu lặp từ & ảo giác.</div>",
     unsafe_allow_html=True
 )
 
@@ -319,6 +324,8 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu tính toán, tra
                 max_new_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=3,
                 eos_token_id=tokenizer.eos_token_id,
             )
 

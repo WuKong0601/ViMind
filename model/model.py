@@ -617,10 +617,11 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         max_new_tokens: int = 512,
         temperature: float = 0.7,
-        top_p: float = 0.9,
+        top_p: float = 0.85,
         top_k: int = 50,
         eos_token_id: Optional[int] = 2,
-        repetition_penalty: float = 1.1,
+        repetition_penalty: float = 1.2,
+        no_repeat_ngram_size: int = 3,
         use_cache: bool = True,
         streamer=None,
         **kwargs,
@@ -664,6 +665,18 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
                         logits[b, unique_tokens] / repetition_penalty,
                         logits[b, unique_tokens] * repetition_penalty,
                     )
+
+            # N-gram repetition blocking (prevents degeneration loops)
+            if no_repeat_ngram_size > 0 and input_ids.shape[1] >= no_repeat_ngram_size:
+                for b in range(bsz):
+                    cur_seq = input_ids[b].tolist()
+                    prefix = tuple(cur_seq[-(no_repeat_ngram_size - 1):])
+                    banned_tokens = set()
+                    for i in range(len(cur_seq) - no_repeat_ngram_size + 1):
+                        if tuple(cur_seq[i:i + no_repeat_ngram_size - 1]) == prefix:
+                            banned_tokens.add(cur_seq[i + no_repeat_ngram_size - 1])
+                    if banned_tokens:
+                        logits[b, list(banned_tokens)] = -1e9
 
             # Top-K filtering
             if top_k > 0:

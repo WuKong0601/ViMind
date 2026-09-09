@@ -71,6 +71,10 @@ def save_checkpoint(model, tokenizer, config, optimizer, scaler, epoch: int, ste
     model.save_pretrained(step_save_dir)
     tokenizer.save_pretrained(step_save_dir)
 
+    # Also save .pth for convert_model compatibility
+    pth_name = f"{prefix}_step_{step}.pth" if "epoch" not in prefix else f"{prefix}.pth"
+    torch.save(model.state_dict(), os.path.join(save_dir, pth_name))
+
     # Save training state for resumption
     checkpoint_state = {
         "epoch": epoch,
@@ -167,6 +171,9 @@ def train(args):
         intermediate_size=args.intermediate_size,
         max_position_embeddings=args.max_seq_len,
         dropout=args.dropout,
+        use_moe=args.use_moe,
+        num_experts=args.num_experts,
+        num_experts_per_tok=args.num_experts_per_tok,
     )
 
     if args.resume_from_checkpoint and os.path.exists(args.resume_from_checkpoint):
@@ -174,6 +181,9 @@ def train(args):
         model = ViMindForCausalLM.from_pretrained(args.resume_from_checkpoint)
     else:
         model = ViMindForCausalLM(config)
+
+    if getattr(config, "tie_word_embeddings", True):
+        model.lm_head.weight = model.model.embed_tokens.weight
 
     if args.gradient_checkpointing:
         print("      ⚡ Gradient Checkpointing enabled.")
@@ -183,8 +193,12 @@ def train(args):
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"      Total Parameters:     {total_params:,} ({total_params/1e6:.2f}M)")
     print(f"      Trainable Parameters: {trainable_params:,} ({trainable_params/1e6:.2f}M)")
+    if args.use_moe:
+        print(f"      Architecture: Mixture-of-Experts ({args.num_experts} experts, top-{args.num_experts_per_tok} active)")
 
     model = model.to(device)
+    if hasattr(model.model, "_init_rope"):
+        model.model._init_rope(device)
     model.train()
 
     # 3. Load Dataset & DataLoader
@@ -262,7 +276,10 @@ def train(args):
             # Forward pass with mixed precision
             with autocast_ctx:
                 outputs = model(input_ids, labels=labels)
-                loss = outputs.loss / args.accumulation_steps
+                loss = outputs.loss
+                if hasattr(outputs, "aux_loss") and outputs.aux_loss is not None:
+                    loss = loss + outputs.aux_loss
+                loss = loss / args.accumulation_steps
 
             # Backward pass
             if use_scaler:
@@ -339,10 +356,11 @@ def train(args):
     # Save Final Model
     final_save_dir = os.path.join(args.save_dir, f"{args.save_weight}_final")
     print(f"\n🎉 Multi-epoch Training complete! Total training time: {format_time(time.time() - start_time)}")
-    print(f"💾 Saving final model to: {final_save_dir}...")
+    print(f"💾 Saving final model to: {final_save_dir} & {args.save_weight}.pth...")
     os.makedirs(final_save_dir, exist_ok=True)
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    torch.save(model.state_dict(), os.path.join(args.save_dir, f"{args.save_weight}.pth"))
     print("✅ Model weights and tokenizer saved successfully!")
 
 
@@ -353,7 +371,7 @@ def get_parser():
     parser.add_argument("--data_path", type=str, default="dataset/pretrain_vi.jsonl", help="Path to pretrain jsonl dataset")
     parser.add_argument("--tokenizer_dir", type=str, default="model", help="Directory of trained tokenizer")
     parser.add_argument("--save_dir", type=str, default="out", help="Directory to save checkpoints")
-    parser.add_argument("--save_weight", type=str, default="vimind_64m", help="Prefix for checkpoint filenames")
+    parser.add_argument("--save_weight", type=str, default="vimind_4.0_base", help="Prefix for checkpoint filenames")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to checkpoint directory to resume")
 
     # Architecture Hyperparameters
@@ -366,6 +384,9 @@ def get_parser():
     parser.add_argument("--max_seq_len", type=int, default=1024, help="Maximum sequence length")
     parser.add_argument("--dropout", type=float, default=0.0, help="Dropout probability")
     parser.add_argument("--gradient_checkpointing", action="store_true", help="Enable gradient checkpointing to save VRAM")
+    parser.add_argument("--use_moe", action="store_true", help="Enable Mixture-of-Experts architecture")
+    parser.add_argument("--num_experts", type=int, default=4, help="Number of experts in MoE")
+    parser.add_argument("--num_experts_per_tok", type=int, default=2, help="Number of active experts per token (top-k)")
 
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")

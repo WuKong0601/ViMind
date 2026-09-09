@@ -224,7 +224,7 @@ def run_benchmark(model_path: str, device_str: str = "cuda" if torch.cuda.is_ava
         model = ViMindForCausalLM(config)
         # Load weights
         weight_file = None
-        for wf in ["model.safetensors", "pytorch_model.bin", "vimind_sft.pth", "vimind_agent_rl.pth"]:
+        for wf in ["model.safetensors", "vimind_4.0_agent.pth", "vimind_3.0_agent.pth", "pytorch_model.bin", "vimind_sft.pth", "vimind_agent_rl.pth"]:
             candidate = os.path.join(model_path, wf)
             if os.path.exists(candidate):
                 weight_file = candidate

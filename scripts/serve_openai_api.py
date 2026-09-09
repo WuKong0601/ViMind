@@ -155,6 +155,8 @@ async def chat_completions(req: ChatCompletionRequest):
                 max_new_tokens=req.max_tokens,
                 temperature=req.temperature,
                 top_p=req.top_p,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id,
             )

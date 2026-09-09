@@ -47,6 +47,7 @@ def get_parser():
     parser.add_argument("--dropout", type=float, default=0.05, help="Dropout probability for SFT")
     parser.add_argument("--use_moe", action="store_true", help="Enable Mixture-of-Experts architecture")
     parser.add_argument("--num_experts", type=int, default=4, help="Number of experts if using MoE")
+    parser.add_argument("--num_experts_per_tok", type=int, default=2, help="Number of active experts per token")
 
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=2, help="Number of SFT training epochs")
@@ -114,6 +115,18 @@ def train_sft(args):
 
     # 2. Build or Load Model
     print(f"[2/5] Initializing / Loading Model...")
+    if args.from_pretrained == "none":
+        for cand in [
+            "out/pretrain/vimind_4.0_base_final",
+            "out/pretrain",
+            "out/pretrain_moe",
+            "out/pretrain/vimind_64m_final",
+        ]:
+            if os.path.exists(cand):
+                print(f"      💡 [Auto-Detect] Found pretrained base checkpoint at: {cand}. Upgrading from fresh to base!")
+                args.from_pretrained = cand
+                break
+
     if args.from_pretrained != "none" and os.path.exists(args.from_pretrained):
         print(f"      Loading weights from pre-trained checkpoint: {args.from_pretrained}")
         model = ViMindForCausalLM.from_pretrained(args.from_pretrained)
@@ -133,6 +146,7 @@ def train_sft(args):
             dropout=args.dropout,
             use_moe=args.use_moe,
             num_experts=args.num_experts,
+            num_experts_per_tok=args.num_experts_per_tok,
         )
         model = ViMindForCausalLM(config)
 
