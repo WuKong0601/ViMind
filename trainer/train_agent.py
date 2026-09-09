@@ -238,30 +238,68 @@ def train_agent(args):
     # 1. Load Tokenizer & Model
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_dir)
     print(f"📦 Loading Policy Model from: {args.model_path}...")
-    actual_model_path = args.model_path
-    if os.path.isdir(actual_model_path):
-        if not os.path.exists(os.path.join(actual_model_path, "config.json")):
-            # Look inside subfolders
-            subfolders = [os.path.join(actual_model_path, d) for d in os.listdir(actual_model_path) if os.path.isdir(os.path.join(actual_model_path, d))]
-            for sf in subfolders:
-                if os.path.exists(os.path.join(sf, "config.json")):
-                    actual_model_path = sf
-                    break
+    candidates = [
+        args.model_path,
+        os.path.join(args.model_path, "vimind_4.0_dpo_final"),
+        os.path.join(args.model_path, "vimind_4.0_dpo.pth"),
+        os.path.join(args.model_path, "vimind_4.0_moe_final"),
+        os.path.join(args.model_path, "vimind_4.0_moe.pth"),
+        "out/dpo/vimind_4.0_dpo_final",
+        "out/dpo/vimind_4.0_dpo.pth",
+        "out/sft_moe/vimind_4.0_moe_final",
+        "out/sft_moe/vimind_4.0_moe.pth",
+        "out/sft_moe",
+        "out/pretrain/vimind_4.0_base_final",
+        "out/pretrain/vimind_4.0_base.pth",
+        "out/pretrain",
+    ]
+    resolved_path = None
+    for cand in candidates:
+        if os.path.isfile(cand) and cand.endswith((".pth", ".safetensors", ".bin")):
+            resolved_path = cand
+            break
+        if os.path.isdir(cand) and (
+            os.path.exists(os.path.join(cand, "config.json"))
+            or os.path.exists(os.path.join(cand, "model.safetensors"))
+            or os.path.exists(os.path.join(cand, "pytorch_model.bin"))
+        ):
+            resolved_path = cand
+            break
 
-    if os.path.exists(actual_model_path) and (os.path.isdir(actual_model_path) or actual_model_path.endswith((".safetensors", ".pth", ".bin"))):
-        if os.path.isdir(actual_model_path):
-            model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
-        else:
-            config = ViMindConfig(use_moe=True, num_experts=4)
-            model = ViMindForCausalLM(config)
-            st = torch.load(actual_model_path, map_location="cpu") if not actual_model_path.endswith(".safetensors") else None
-            if st:
+    model = None
+    if resolved_path and os.path.exists(resolved_path):
+        try:
+            print(f"      Loading weights from: {resolved_path}")
+            if os.path.isdir(resolved_path):
+                model = ViMindForCausalLM.from_pretrained(resolved_path).to(device)
+            elif resolved_path.endswith((".pth", ".bin")):
+                config = ViMindConfig(
+                    vocab_size=len(tokenizer),
+                    use_moe=True,
+                    num_experts=4,
+                    num_experts_per_tok=2,
+                )
+                model = ViMindForCausalLM(config)
+                st = torch.load(resolved_path, map_location="cpu")
                 model.load_state_dict(st, strict=False)
-            model = model.to(device)
-    else:
-        print(f"⚠️ Model path {args.model_path} not found directly, initializing fresh MoE architecture...")
-        config = ViMindConfig(use_moe=True, num_experts=4)
+                model = model.to(device)
+        except Exception as e:
+            print(f"      ⚠️ Warning: Failed to load pretrained checkpoint ({e}). Initializing fresh MoE!")
+            model = None
+
+    if model is None:
+        print(f"⚠️ Model path {args.model_path} not found or corrupted, initializing fresh MoE architecture (Vocab: {len(tokenizer)})...")
+        config = ViMindConfig(
+            vocab_size=len(tokenizer),
+            use_moe=True,
+            num_experts=4,
+            num_experts_per_tok=2,
+        )
         model = ViMindForCausalLM(config).to(device)
+
+    # Ensure vocab size and embeddings are aligned with tokenizer
+    if getattr(model.config, "vocab_size", 0) < len(tokenizer):
+        model.config.vocab_size = len(tokenizer)
 
     model.train()
 
@@ -291,6 +329,8 @@ def train_agent(args):
                 messages = [{"role": "user", "content": query}]
                 context = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, tools=TOOLS)
                 inputs = tokenizer(context, return_tensors="pt").to(device)
+                if hasattr(model.config, "vocab_size") and model.config.vocab_size:
+                    inputs["input_ids"] = torch.clamp(inputs["input_ids"], 0, model.config.vocab_size - 1)
 
                 # Generate tool call rollout
                 model.eval()
@@ -328,6 +368,8 @@ def train_agent(args):
 
                 # Policy gradient loss step (GRPO-style advantage weighting)
                 full_ids = gen_tokens.clone().detach()
+                if hasattr(model.config, "vocab_size") and model.config.vocab_size:
+                    full_ids = torch.clamp(full_ids, 0, model.config.vocab_size - 1)
                 outputs = model(full_ids, labels=full_ids)
                 # Maximize reward -> minimize -R * log_prob
                 loss = outputs.loss * (-R if R < 0 else 1.0 / (R + 1.0))

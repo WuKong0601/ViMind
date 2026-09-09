@@ -214,21 +214,28 @@ def run_benchmark(model_path: str, device_str: str = "cuda" if torch.cuda.is_ava
     has_weights = os.path.exists(model_path) and (
         os.path.exists(os.path.join(model_path, "pytorch_model.bin")) or
         os.path.exists(os.path.join(model_path, "model.safetensors")) or
+        os.path.exists(os.path.join(model_path, "vimind_4.0_agent.pth")) or
+        os.path.exists(os.path.join(model_path, "vimind_4.0_dpo.pth")) or
+        os.path.exists(os.path.join(model_path, "vimind_4.0_moe.pth")) or
         os.path.exists(os.path.join(model_path, "vimind_sft.pth")) or
-        os.path.exists(os.path.join(model_path, "vimind_agent_rl.pth"))
+        os.path.exists(os.path.join(model_path, "vimind_agent_rl.pth")) or
+        model_path.endswith((".pth", ".safetensors", ".bin"))
     )
 
     if has_weights:
         print(f"Loading ViMind weights from {model_path}...")
-        config = ViMindConfig.from_pretrained(model_path) if os.path.exists(os.path.join(model_path, "config.json")) else ViMindConfig()
+        config = ViMindConfig.from_pretrained(model_path) if os.path.isdir(model_path) and os.path.exists(os.path.join(model_path, "config.json")) else ViMindConfig(vocab_size=len(tokenizer), use_moe=True, num_experts=4, num_experts_per_tok=2)
         model = ViMindForCausalLM(config)
         # Load weights
         weight_file = None
-        for wf in ["model.safetensors", "vimind_4.0_agent.pth", "vimind_3.0_agent.pth", "pytorch_model.bin", "vimind_sft.pth", "vimind_agent_rl.pth"]:
-            candidate = os.path.join(model_path, wf)
-            if os.path.exists(candidate):
-                weight_file = candidate
-                break
+        if os.path.isfile(model_path) and model_path.endswith((".pth", ".safetensors", ".bin")):
+            weight_file = model_path
+        else:
+            for wf in ["model.safetensors", "vimind_4.0_agent.pth", "vimind_4.0_dpo.pth", "vimind_4.0_moe.pth", "vimind_3.0_agent.pth", "pytorch_model.bin", "vimind_sft.pth", "vimind_agent_rl.pth"]:
+                candidate = os.path.join(model_path, wf)
+                if os.path.exists(candidate):
+                    weight_file = candidate
+                    break
         if weight_file:
             if weight_file.endswith(".safetensors"):
                 from safetensors.torch import load_file

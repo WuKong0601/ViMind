@@ -183,17 +183,70 @@ def train_dpo(args):
 
     # 4. Load Models: Policy Model & Frozen Reference Model
     print(f"[3/5] Loading Policy Model and Reference Model from: {args.model_path}...")
-    actual_model_path = args.model_path
-    if os.path.isdir(actual_model_path):
-        if not os.path.exists(os.path.join(actual_model_path, "config.json")):
-            subfolders = [os.path.join(actual_model_path, d) for d in os.listdir(actual_model_path) if os.path.isdir(os.path.join(actual_model_path, d))]
-            for sf in subfolders:
-                if os.path.exists(os.path.join(sf, "config.json")):
-                    actual_model_path = sf
-                    break
+    candidates = [
+        args.model_path,
+        os.path.join(args.model_path, "vimind_4.0_moe_final"),
+        os.path.join(args.model_path, "vimind_4.0_moe.pth"),
+        "out/sft_moe/vimind_4.0_moe_final",
+        "out/sft_moe/vimind_4.0_moe.pth",
+        "out/sft_moe",
+        "out/pretrain/vimind_4.0_base_final",
+        "out/pretrain/vimind_4.0_base.pth",
+        "out/pretrain",
+    ]
+    resolved_path = None
+    for cand in candidates:
+        if os.path.isfile(cand) and cand.endswith((".pth", ".safetensors", ".bin")):
+            resolved_path = cand
+            break
+        if os.path.isdir(cand) and (
+            os.path.exists(os.path.join(cand, "config.json"))
+            or os.path.exists(os.path.join(cand, "model.safetensors"))
+            or os.path.exists(os.path.join(cand, "pytorch_model.bin"))
+        ):
+            resolved_path = cand
+            break
 
-    policy_model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
-    ref_model = ViMindForCausalLM.from_pretrained(actual_model_path).to(device)
+    policy_model = None
+    ref_model = None
+
+    if resolved_path and os.path.exists(resolved_path):
+        try:
+            print(f"      Loading weights from: {resolved_path}")
+            if os.path.isdir(resolved_path):
+                policy_model = ViMindForCausalLM.from_pretrained(resolved_path).to(device)
+                ref_model = ViMindForCausalLM.from_pretrained(resolved_path).to(device)
+            elif resolved_path.endswith(".pth"):
+                config = ViMindConfig(
+                    vocab_size=len(tokenizer),
+                    use_moe=True,
+                    num_experts=4,
+                    num_experts_per_tok=2,
+                    max_seq_len=args.max_seq_len,
+                )
+                policy_model = ViMindForCausalLM(config)
+                ref_model = ViMindForCausalLM(config)
+                st = torch.load(resolved_path, map_location="cpu")
+                policy_model.load_state_dict(st, strict=False)
+                ref_model.load_state_dict(st, strict=False)
+                policy_model = policy_model.to(device)
+                ref_model = ref_model.to(device)
+        except Exception as e:
+            print(f"      ⚠️ Warning: Failed to load pretrained checkpoint ({e}). Initializing fresh MoE!")
+            policy_model = None
+            ref_model = None
+
+    if policy_model is None or ref_model is None:
+        print("      ⚠️ No valid pre-trained checkpoint found. Initializing fresh MoE architecture for DPO...")
+        config = ViMindConfig(
+            vocab_size=len(tokenizer),
+            use_moe=True,
+            num_experts=4,
+            num_experts_per_tok=2,
+            max_seq_len=args.max_seq_len,
+        )
+        policy_model = ViMindForCausalLM(config).to(device)
+        ref_model = ViMindForCausalLM(config).to(device)
 
     # Freeze reference model
     ref_model.eval()

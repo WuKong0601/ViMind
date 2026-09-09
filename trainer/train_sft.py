@@ -63,6 +63,7 @@ def get_parser():
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Device to use")
     parser.add_argument("--dtype", type=str, default="bfloat16" if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else "float16", help="Precision: bfloat16, float16, float32")
     parser.add_argument("--num_workers", type=int, default=0, help="DataLoader worker processes")
+    parser.add_argument("--gradient_checkpointing", action="store_true", help="Enable gradient checkpointing to save VRAM")
     parser.add_argument("--log_interval", type=int, default=25, help="Interval steps for printing terminal logs")
     parser.add_argument("--save_interval", type=int, default=500, help="Interval steps for saving model checkpoints")
 
@@ -115,25 +116,57 @@ def train_sft(args):
 
     # 2. Build or Load Model
     print(f"[2/5] Initializing / Loading Model...")
+    model = None
     if args.from_pretrained == "none":
         for cand in [
             "out/pretrain/vimind_4.0_base_final",
+            "out/pretrain/vimind_4.0_base.pth",
             "out/pretrain",
             "out/pretrain_moe",
             "out/pretrain/vimind_64m_final",
         ]:
-            if os.path.exists(cand):
+            if os.path.isfile(cand) and cand.endswith(".pth"):
+                args.from_pretrained = cand
+                break
+            if os.path.isdir(cand) and (
+                os.path.exists(os.path.join(cand, "model.safetensors"))
+                or os.path.exists(os.path.join(cand, "pytorch_model.bin"))
+                or os.path.exists(os.path.join(cand, "config.json"))
+            ):
                 print(f"      💡 [Auto-Detect] Found pretrained base checkpoint at: {cand}. Upgrading from fresh to base!")
                 args.from_pretrained = cand
                 break
 
     if args.from_pretrained != "none" and os.path.exists(args.from_pretrained):
-        print(f"      Loading weights from pre-trained checkpoint: {args.from_pretrained}")
-        model = ViMindForCausalLM.from_pretrained(args.from_pretrained)
-        config = model.config
-        if getattr(config, "tie_word_embeddings", True):
-            model.lm_head.weight = model.model.embed_tokens.weight
-    else:
+        try:
+            print(f"      Loading weights from pre-trained checkpoint: {args.from_pretrained}")
+            if os.path.isdir(args.from_pretrained):
+                model = ViMindForCausalLM.from_pretrained(args.from_pretrained)
+            elif args.from_pretrained.endswith(".pth"):
+                config = ViMindConfig(
+                    vocab_size=len(tokenizer),
+                    hidden_size=args.hidden_size,
+                    num_hidden_layers=args.num_hidden_layers,
+                    num_attention_heads=args.num_attention_heads,
+                    num_key_value_heads=args.num_key_value_heads,
+                    intermediate_size=args.intermediate_size,
+                    max_position_embeddings=args.max_seq_len,
+                    dropout=args.dropout,
+                    use_moe=args.use_moe,
+                    num_experts=args.num_experts,
+                    num_experts_per_tok=args.num_experts_per_tok,
+                )
+                model = ViMindForCausalLM(config)
+                st = torch.load(args.from_pretrained, map_location="cpu")
+                model.load_state_dict(st, strict=False)
+            config = model.config
+            if getattr(config, "tie_word_embeddings", True):
+                model.lm_head.weight = model.model.embed_tokens.weight
+        except Exception as e:
+            print(f"      ⚠️ Warning: Failed to load pretrained weights ({e}). Falling back to fresh architecture!")
+            model = None
+
+    if model is None:
         print(f"      Training SFT directly from fresh architecture...")
         config = ViMindConfig(
             vocab_size=len(tokenizer),
@@ -152,6 +185,10 @@ def train_sft(args):
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"      Total Parameters: {total_params:,} ({total_params/1e6:.2f}M)")
+
+    if getattr(args, "gradient_checkpointing", False):
+        print("      ⚡ Gradient Checkpointing enabled.")
+        model.gradient_checkpointing_enable()
 
     model = model.to(device)
     if hasattr(model.model, "_init_rope"):

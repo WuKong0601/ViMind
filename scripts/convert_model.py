@@ -24,6 +24,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from transformers import AutoTokenizer
 from model.model import ViMindConfig, ViMindForCausalLM
 
 
@@ -32,24 +33,25 @@ def convert_and_export(
     output_dir: str,
     lora_dir: str = None,
     is_moe: bool = False,
-    num_experts: int = 4
+    num_experts: int = 4,
+    num_experts_per_tok: int = 2
 ):
     print("=" * 70)
-    print("       ViMind 3.0 - Model Packaging & Export Tool")
+    print("       ViMind 4.0 - Model Packaging & Export Tool")
     print("=" * 70)
     print(f"Input Checkpoint: {input_checkpoint}")
     print(f"Output Directory: {output_dir}")
     print(f"LoRA Adapter Dir: {lora_dir}")
-    print(f"MoE Architecture: {is_moe} (Experts: {num_experts})\n")
+    print(f"MoE Architecture: {is_moe} (Experts: {num_experts}, Top-{num_experts_per_tok})\n")
 
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. Config selection & vocab size detection
-    vocab_size = 12800
+    vocab_size = 12803
     if os.path.exists("model/tokenizer_config.json") or os.path.exists("model/tokenizer.json"):
         try:
             tok = AutoTokenizer.from_pretrained("model")
-            vocab_size = max(len(tok), 12800)
+            vocab_size = max(len(tok), 12803)
         except Exception:
             pass
 
@@ -58,7 +60,7 @@ def convert_and_export(
             vocab_size=vocab_size,
             use_moe=True,
             num_experts=num_experts,
-            num_experts_per_tok=1,
+            num_experts_per_tok=num_experts_per_tok,
             max_seq_len=2048,
             rope_theta=1e6
         )
@@ -79,12 +81,22 @@ def convert_and_export(
     if not os.path.exists(resolved_path):
         candidates = [
             resolved_path + ".pth",
-            os.path.join(os.path.dirname(resolved_path), "vimind_3.0_moe_final", "model.safetensors"),
-            os.path.join(os.path.dirname(resolved_path), "vimind_3.0_agent_final", "model.safetensors"),
-            os.path.join("out", "agent_rl", "vimind_3.0_agent_final", "model.safetensors"),
-            os.path.join("out", "agent_rl", "vimind_3.0_agent.pth"),
-            os.path.join("out", "sft_moe", "vimind_3.0_moe_final", "model.safetensors"),
-            os.path.join("out", "sft_moe", "vimind_3.0_moe.pth"),
+            resolved_path,
+            os.path.join(os.path.dirname(resolved_path) if os.path.dirname(resolved_path) else ".", "vimind_4.0_agent_final", "model.safetensors"),
+            os.path.join(os.path.dirname(resolved_path) if os.path.dirname(resolved_path) else ".", "vimind_4.0_dpo_final", "model.safetensors"),
+            os.path.join(os.path.dirname(resolved_path) if os.path.dirname(resolved_path) else ".", "vimind_4.0_moe_final", "model.safetensors"),
+            os.path.join("out", "agent_rl", "vimind_4.0_agent.pth"),
+            os.path.join("out", "agent_rl", "vimind_4.0_agent_final", "model.safetensors"),
+            os.path.join("out", "agent_rl", "model.safetensors"),
+            os.path.join("out", "dpo", "vimind_4.0_dpo.pth"),
+            os.path.join("out", "dpo", "vimind_4.0_dpo_final", "model.safetensors"),
+            os.path.join("out", "dpo", "model.safetensors"),
+            os.path.join("out", "sft_moe", "vimind_4.0_moe.pth"),
+            os.path.join("out", "sft_moe", "vimind_4.0_moe_final", "model.safetensors"),
+            os.path.join("out", "sft_moe", "model.safetensors"),
+            os.path.join("out", "pretrain", "vimind_4.0_base.pth"),
+            os.path.join("out", "pretrain", "vimind_4.0_base_final", "model.safetensors"),
+            os.path.join("out", "pretrain", "model.safetensors"),
         ]
         for c in candidates:
             if os.path.exists(c):
@@ -213,6 +225,7 @@ def main():
     parser.add_argument("--lora_dir", type=str, default=None, help="Optional LoRA adapter directory to merge")
     parser.add_argument("--moe", action="store_true", help="Set flag if model is MoE")
     parser.add_argument("--num_experts", type=int, default=4, help="Number of experts if MoE")
+    parser.add_argument("--num_experts_per_tok", type=int, default=2, help="Active experts per token if MoE")
     args = parser.parse_args()
 
     convert_and_export(
@@ -220,7 +233,8 @@ def main():
         output_dir=args.output,
         lora_dir=args.lora_dir,
         is_moe=args.moe,
-        num_experts=args.num_experts
+        num_experts=args.num_experts,
+        num_experts_per_tok=args.num_experts_per_tok
     )
 
 

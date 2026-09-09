@@ -15,7 +15,7 @@ class ViMindConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int = 12800,
+        vocab_size: int = 12803,
         hidden_size: int = 512,
         num_hidden_layers: int = 8,
         num_attention_heads: int = 8,
@@ -33,7 +33,7 @@ class ViMindConfig(PretrainedConfig):
         flash_attn: bool = True,
         use_moe: bool = False,
         num_experts: int = 4,
-        num_experts_per_tok: int = 1,
+        num_experts_per_tok: int = 2,
         moe_intermediate_size: Optional[int] = None,
         norm_topk_prob: bool = True,
         router_aux_loss_coef: float = 5e-4,
@@ -584,16 +584,16 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
             aux_loss = sum(getattr(layer.mlp, "aux_loss", 0.0) for layer in self.model.layers if hasattr(layer, "mlp"))
 
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+            # Shift so that tokens < n predict n (avoid unnecessary contiguous copies to reduce VRAM spike)
+            shift_logits = logits[..., :-1, :]
+            shift_labels = labels[..., 1:]
             valid_tokens = (shift_labels != -100).sum()
             if valid_tokens == 0:
                 loss = torch.tensor(0.0, device=logits.device, requires_grad=True)
             else:
                 loss = F.cross_entropy(
-                    shift_logits.view(-1, shift_logits.size(-1)).float(),
-                    shift_labels.view(-1),
+                    shift_logits.reshape(-1, shift_logits.size(-1)).float(),
+                    shift_labels.reshape(-1),
                     ignore_index=-100,
                 )
             if aux_loss is not None:
@@ -629,6 +629,10 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
         """Lightweight native autoregressive text generation."""
         if input_ids is None:
             input_ids = inputs
+
+        # Defensive clamping against out-of-bounds token indices
+        if hasattr(self.config, "vocab_size") and self.config.vocab_size:
+            input_ids = torch.clamp(input_ids, 0, self.config.vocab_size - 1)
 
         bsz = input_ids.shape[0]
         finished = torch.zeros(bsz, dtype=torch.bool, device=input_ids.device)
@@ -703,6 +707,9 @@ class ViMindForCausalLM(PreTrainedModel, GenerationMixin):
                 next_token = torch.multinomial(probs, num_samples=1)
             else:
                 next_token = torch.argmax(logits, dim=-1, keepdim=True)
+
+            if hasattr(self.config, "vocab_size") and self.config.vocab_size:
+                next_token = torch.clamp(next_token, 0, self.config.vocab_size - 1)
 
             # Check EOS
             if eos_token_id is not None:

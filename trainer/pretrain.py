@@ -360,6 +360,8 @@ def train(args):
     os.makedirs(final_save_dir, exist_ok=True)
     model.save_pretrained(final_save_dir)
     tokenizer.save_pretrained(final_save_dir)
+    model.save_pretrained(args.save_dir)
+    tokenizer.save_pretrained(args.save_dir)
     torch.save(model.state_dict(), os.path.join(args.save_dir, f"{args.save_weight}.pth"))
     print("✅ Model weights and tokenizer saved successfully!")
 
