@@ -34,23 +34,24 @@ def generate_math_samples(count=3000):
         ("Thực hiện phép tính: 25 x 18 + 750 : 5.", 25, 18, 750, 5),
         ("Cho biểu thức 25 * 18 + 750 / 5, kết quả là gì?", 25, 18, 750, 5),
     ]
-    for q, a, b, c, d in math_anchors:
-        p1 = a * b
-        p2 = c // d
-        res = p1 + p2
-        thought = (
-            f"Để giải bài toán này, ta thực hiện các phép nhân chia trước, cộng trừ sau:\n"
-            f"- Bước 1: Tính phép nhân {a} * {b} = {p1}.\n"
-            f"- Bước 2: Tính phép chia {c} / {d} = {p2}.\n"
-            f"- Bước 3: Cộng hai kết quả lại: {p1} + {p2} = {res}."
-        )
-        answer = f"Kết quả của phép tính {a} * {b} + {c} / {d} là **{res}**."
-        samples.append({
-            "conversations": [
-                {"role": "user", "content": q},
-                {"role": "assistant", "content": f"<think>\n{thought}\n</think>\n{answer}"}
-            ]
-        })
+    for _ in range(40):
+        for q, a, b, c, d in math_anchors:
+            p1 = a * b
+            p2 = c // d
+            res = p1 + p2
+            thought = (
+                f"Để giải bài toán này, ta thực hiện các phép nhân chia trước, cộng trừ sau:\n"
+                f"- Bước 1: Tính phép nhân {a} * {b} = {p1}.\n"
+                f"- Bước 2: Tính phép chia {c} / {d} = {p2}.\n"
+                f"- Bước 3: Cộng hai kết quả lại: {p1} + {p2} = {res}."
+            )
+            answer = f"Kết quả của phép tính {a} * {b} + {c} / {d} là **{res}**."
+            samples.append({
+                "conversations": [
+                    {"role": "user", "content": q},
+                    {"role": "assistant", "content": f"<think>\n{thought}\n</think>\n{answer}"}
+                ]
+            })
 
     # 2. Procedural Multi-step Arithmetic with CoT
     random.seed(42)

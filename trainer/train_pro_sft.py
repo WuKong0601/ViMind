@@ -125,7 +125,8 @@ def train_pro(args):
     warmup_steps = int(total_steps * 0.05)
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
 
-    scaler = torch.amp.GradScaler("cuda", enabled=("cuda" in str(device) and args.fp16))
+    if hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable()
 
     # 4. Training Loop
     print(f"[3/4] Commencing Alignment & SFT Loop ({total_steps} steps)...")
@@ -140,27 +141,15 @@ def train_pro(args):
             labels = labels.to(device)
             attention_mask = attention_mask.to(device)
 
-            with torch.amp.autocast("cuda", enabled=("cuda" in str(device) and args.fp16), dtype=dtype):
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                loss = outputs.loss / args.accumulation_steps
-
-            if scaler.is_enabled():
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss / args.accumulation_steps
+            loss.backward()
 
             running_loss += loss.item() * args.accumulation_steps
 
             if step % args.accumulation_steps == 0 or step == len(loader):
-                if scaler.is_enabled():
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                    optimizer.step()
-
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
