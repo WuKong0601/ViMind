@@ -242,6 +242,29 @@ def run_benchmark(model_path: str, device_str: str = "cuda" if torch.cuda.is_ava
                 state = load_file(weight_file)
             else:
                 state = torch.load(weight_file, map_location="cpu")
+
+            if "model" in state and isinstance(state["model"], dict):
+                state = state["model"]
+            state = {k.replace("module.", ""): v for k, v in state.items()}
+
+            embed_key = next((k for k in ["model.embed_tokens.weight", "embed_tokens.weight"] if k in state), None)
+            if embed_key and state[embed_key].shape[1] != model.config.hidden_size:
+                ckpt_h = state[embed_key].shape[1]
+                if ckpt_h == 640:
+                    config = ViMindConfig(
+                        vocab_size=state[embed_key].shape[0],
+                        hidden_size=640,
+                        num_hidden_layers=12,
+                        num_attention_heads=10,
+                        num_key_value_heads=5,
+                        intermediate_size=1728,
+                        max_seq_len=2048,
+                        use_moe=True,
+                        num_experts=4,
+                        num_experts_per_tok=2
+                    )
+                    model = ViMindForCausalLM(config)
+
             model.load_state_dict(state, strict=False)
         model.to(device_str)
         model.eval()
@@ -279,6 +302,7 @@ def run_benchmark(model_path: str, device_str: str = "cuda" if torch.cuda.is_ava
 
         parsed_calls = parse_tool_call_from_text(raw_output)
         called_tool = len(parsed_calls) > 0
+        print(f"  [Model Output]: {raw_output.strip()[:140]}")
 
         case_res = {
             "id": case["id"],
