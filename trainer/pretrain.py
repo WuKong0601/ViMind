@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import shutil
 import argparse
 from datetime import timedelta
 from contextlib import nullcontext
@@ -86,6 +87,19 @@ def save_checkpoint(model, tokenizer, config, optimizer, scaler, epoch: int, ste
     torch.save(checkpoint_state, os.path.join(step_save_dir, "trainer_state.pt"))
     print(f"\n[INFO] Checkpoint saved successfully to: {step_save_dir}")
 
+    # Clean up older intermediate step checkpoints to preserve disk space (keep only latest 1)
+    if "epoch" not in prefix:
+        try:
+            for item in os.listdir(save_dir):
+                if item.startswith(prefix) and f"_step_{step}" not in item and ("_step_" in item):
+                    item_path = os.path.join(save_dir, item)
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path, ignore_errors=True)
+                    elif os.path.isfile(item_path):
+                        os.remove(item_path)
+        except Exception as e:
+            pass
+
 
 def train(args):
     # Apply architecture presets
@@ -96,7 +110,8 @@ def train(args):
         args.num_key_value_heads = 5
         args.intermediate_size = 1728
         args.max_seq_len = 1024
-        args.save_weight = "vimind_64m"
+        if not getattr(args, "save_weight", None) or args.save_weight in ["vimind_base", "vimind_64m"]:
+            args.save_weight = "vimind_64m"
     elif args.model_size == "26m":
         args.hidden_size = 512
         args.num_hidden_layers = 8
@@ -218,8 +233,10 @@ def train(args):
     )
     num_batches_per_epoch = len(train_loader)
     total_steps = num_batches_per_epoch * args.epochs
+    if getattr(args, "max_steps", None) and args.max_steps > 0:
+        total_steps = min(total_steps, args.max_steps)
     print(f"      Total samples: {len(train_dataset):,}")
-    print(f"      Batches per epoch: {num_batches_per_epoch:,} | Total Steps across {args.epochs} epochs: {total_steps:,}")
+    print(f"      Batches per epoch: {num_batches_per_epoch:,} | Total Steps: {total_steps:,}")
 
     # 4. Optimizer & Schedule
     print(f"[4/5] Setting up AdamW optimizer and Cosine LR schedule...")
@@ -338,6 +355,13 @@ def train(args):
                 )
                 model.train()
 
+            if getattr(args, "max_steps", None) and global_step >= args.max_steps:
+                print(f"\n⚡ Reached max_steps={args.max_steps}. Stopping pretraining early...")
+                break
+
+        if getattr(args, "max_steps", None) and global_step >= args.max_steps:
+            break
+
         # Save End-of-Epoch Checkpoint
         print(f"\n✅ Completed Epoch {epoch}/{args.epochs}. Saving epoch checkpoint...")
         save_checkpoint(
@@ -392,6 +416,7 @@ def get_parser():
 
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
+    parser.add_argument("--max_steps", type=int, default=None, help="Maximum number of training steps")
     parser.add_argument("--batch_size", type=int, default=16, help="Micro-batch size per forward step")
     parser.add_argument("--accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
     parser.add_argument("--learning_rate", type=float, default=5e-4, help="Peak learning rate")

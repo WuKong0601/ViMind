@@ -51,6 +51,7 @@ def get_parser():
 
     # Training Hyperparameters
     parser.add_argument("--epochs", type=int, default=2, help="Number of SFT training epochs")
+    parser.add_argument("--max_steps", type=int, default=None, help="Maximum number of SFT training steps")
     parser.add_argument("--batch_size", type=int, default=16, help="Micro-batch size per forward step")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="Gradient accumulation steps")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Peak learning rate for SFT")
@@ -212,6 +213,8 @@ def train_sft(args):
     )
     num_batches_per_epoch = len(sft_loader)
     total_steps = num_batches_per_epoch * args.epochs
+    if getattr(args, "max_steps", None) and args.max_steps > 0:
+        total_steps = min(total_steps, args.max_steps)
     print(f"      Total conversations: {len(sft_dataset):,}")
     print(f"      Batches per epoch: {num_batches_per_epoch:,} | Total SFT Steps: {total_steps:,}")
 
@@ -330,6 +333,13 @@ def train_sft(args):
                     prefix=args.save_weight,
                 )
                 model.train()
+
+            if getattr(args, "max_steps", None) and global_step >= args.max_steps:
+                print(f"\n⚡ Reached max_steps={args.max_steps}. Stopping SFT early...")
+                break
+
+        if getattr(args, "max_steps", None) and global_step >= args.max_steps:
+            break
 
     # Save Final SFT Model
     final_save_dir = os.path.join(args.save_dir, f"{args.save_weight}_final")
