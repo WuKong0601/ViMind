@@ -97,10 +97,10 @@ def train_pro(args):
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        dtype = torch.float16 if ("cuda" in str(device) and args.fp16) else torch.float32
+        # Master weights kept in float32 for AdamW numerical stability and AMP autocast
         model = AutoModelForCausalLM.from_pretrained(
             args.model_name_or_path,
-            torch_dtype=dtype,
+            torch_dtype=torch.float32,
             trust_remote_code=True,
             device_map=None
         ).to(device)
@@ -125,6 +125,9 @@ def train_pro(args):
     warmup_steps = int(total_steps * 0.05)
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
 
+    use_amp = ("cuda" in str(device) and args.fp16)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+
     if hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
 
@@ -141,15 +144,32 @@ def train_pro(args):
             labels = labels.to(device)
             attention_mask = attention_mask.to(device)
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss / args.accumulation_steps
-            loss.backward()
+            with torch.amp.autocast("cuda", enabled=use_amp, dtype=torch.float16):
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss / args.accumulation_steps
+
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"⚠️ Warning: NaN/Inf loss detected at step {step}, skipping batch.")
+                optimizer.zero_grad(set_to_none=True)
+                continue
+
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
             running_loss += loss.item() * args.accumulation_steps
 
             if step % args.accumulation_steps == 0 or step == len(loader):
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
+                if scaler.is_enabled():
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    optimizer.step()
+
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 global_step += 1
@@ -165,10 +185,10 @@ def train_pro(args):
         if args.max_steps and global_step >= args.max_steps:
             break
 
-    # Save ViMind 4.0 Pro
+    # Save ViMind 4.0 Pro in FP16 to minimize disk space & fast inference
     print(f"\n[4/4] Saving ViMind 4.0 Pro model to {args.output_dir}...")
     os.makedirs(args.output_dir, exist_ok=True)
-    model.save_pretrained(args.output_dir)
+    model.half().save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
     print(f"✅ ViMind 4.0 Pro export complete! Total training time: {(time.time() - start_time)/60:.1f} minutes.")
     print("=" * 70)
@@ -181,10 +201,10 @@ def get_parser():
     parser.add_argument("--output_dir", type=str, default="/kaggle/working/vimind_4.0_pro_final", help="Directory to save model")
     parser.add_argument("--max_seq_len", type=int, default=512, help="Max sequence length")
     parser.add_argument("--epochs", type=int, default=2, help="Number of training epochs")
-    parser.add_argument("--max_steps", type=int, default=1500, help="Max training steps")
+    parser.add_argument("--max_steps", type=int, default=500, help="Max training steps")
     parser.add_argument("--batch_size", type=int, default=4, help="Micro-batch size")
     parser.add_argument("--accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
-    parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate")
+    parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="Compute device")
     parser.add_argument("--fp16", action="store_true", default=True, help="Enable half precision")
     parser.add_argument("--log_interval", type=int, default=25, help="Log step interval")
