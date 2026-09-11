@@ -185,23 +185,37 @@ def train_pro(args):
         if args.max_steps and global_step >= args.max_steps:
             break
 
-    # Save ViMind 4.0 Pro in FP16 to minimize disk space & fast inference
-    print(f"\n[4/4] Saving ViMind 4.0 Pro model to {args.output_dir}...")
+    # Save ViMind Pro in FP16 to minimize disk space & fast inference
+    print(f"\n[4/4] Saving ViMind Pro model to {args.output_dir}...")
     os.makedirs(args.output_dir, exist_ok=True)
     model.half().save_pretrained(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
-    print(f"✅ ViMind 4.0 Pro export complete! Total training time: {(time.time() - start_time)/60:.1f} minutes.")
+
+    # Sanitize tokenizer_config.json if extra_special_tokens is saved as a list
+    tok_cfg_path = os.path.join(args.output_dir, "tokenizer_config.json")
+    if os.path.exists(tok_cfg_path):
+        try:
+            with open(tok_cfg_path, "r", encoding="utf-8") as f:
+                tcfg = json.load(f)
+            if isinstance(tcfg.get("extra_special_tokens"), list):
+                tcfg["extra_special_tokens"] = {}
+                with open(tok_cfg_path, "w", encoding="utf-8") as f:
+                    json.dump(tcfg, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
+    print(f"✅ ViMind Pro export complete! Total training time: {(time.time() - start_time)/60:.1f} minutes.")
     print("=" * 70)
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="ViMind 4.0 Pro Foundation Model Alignment Trainer")
+    parser = argparse.ArgumentParser(description="ViMind Pro Foundation Model Alignment Trainer")
     parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="Hugging Face foundation model")
-    parser.add_argument("--data_path", type=str, default="dataset/dense_core_vi.jsonl", help="Path to golden reasoning dataset")
-    parser.add_argument("--output_dir", type=str, default="/kaggle/working/vimind_4.0_pro_final", help="Directory to save model")
+    parser.add_argument("--data_path", type=str, default="dataset/vimind_4.5_master.jsonl", help="Path to master reasoning dataset")
+    parser.add_argument("--output_dir", type=str, default="out/vimind_4.0_pro_final", help="Directory to save model")
     parser.add_argument("--max_seq_len", type=int, default=512, help="Max sequence length")
     parser.add_argument("--epochs", type=int, default=2, help="Number of training epochs")
-    parser.add_argument("--max_steps", type=int, default=500, help="Max training steps")
+    parser.add_argument("--max_steps", type=int, default=1000, help="Max training steps")
     parser.add_argument("--batch_size", type=int, default=4, help="Micro-batch size")
     parser.add_argument("--accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
     parser.add_argument("--learning_rate", type=float, default=2e-5, help="Learning rate")
