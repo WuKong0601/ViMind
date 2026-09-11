@@ -50,4 +50,9 @@ swanlab/
 
 kaggle_outputs*/
 kaggle_logs*/
+kaggle_v*/
 scratch/
+
+# Agent Customizations & Skills
+.agents/
+

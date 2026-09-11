@@ -17,6 +17,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 ckpt_candidates = [
+    ("out/vimind_4.0_moe_final", "VIMIND 4.0 (Native MoE 198M/64M)"),
+    ("out/vimind_4.0_pro_final", "VIMIND 4.0 (Pro 0.5B Foundation)"),
     ("out/vimind_3.0_hf", "VIMIND 3.0 (MoE Final)"),
     ("out/agent_rl", "VIMIND 3.0 (Agentic RL)"),
     ("out/sft_moe", "VIMIND 3.0 (SFT MoE)"),
