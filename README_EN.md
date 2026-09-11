@@ -8,13 +8,29 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Architecture](https://img.shields.io/badge/Architecture-MoE%20198M%20%2F%20Pro%200.5B-purple.svg)]()
 [![Hardware](https://img.shields.io/badge/Compute-NVIDIA%20Tesla%20T4-orange.svg)]()
-[![ARS Skills](https://img.shields.io/badge/Skills-Academic%20Research%20Suite-blueviolet.svg)]()
 
-> **ViMind 4.0** represents a comprehensive cognitive leap in the Vietnamese Small Language Model (SLM) ecosystem. Designed with a strategic **Dual-Track AI** philosophy:
-> 1. **ViMind 4.0 Native (MoE 198M / 64M active):** A 100% sovereign Mixture-of-Experts architecture built from scratch with 4 experts (Top-2 Routing), optimized for ultra-low latency on Edge/IoT devices, standard consumer CPUs, and personal computers.
-> 2. **ViMind 4.0 Pro (0.5B Foundation Alignment):** SFT-aligned on the curated **Golden Dense Reasoning Core**, inheriting 18 trillion pretraining tokens for fluent Vietnamese expression, broad world knowledge, and sharp multi-step reasoning.
+> **ViMind 4.0** represents a comprehensive cognitive leap in the Vietnamese Small Language Model (SLM) ecosystem. Designed with a flexible **Dual-Track AI** strategy:
+> 1. **ViMind 4.0 Native (MoE 198M / 64M active):** A 100% sovereign Mixture-of-Experts architecture built completely from scratch with 4 experts (Top-2 Routing), optimized for ultra-low latency on Edge/IoT devices, consumer CPUs, and personal computers without dedicated GPUs.
+> 2. **ViMind 4.0 Pro (0.5B Foundation Alignment):** SFT-aligned on the curated **Golden Dense Reasoning Core**, inheriting 18 trillion pretraining tokens for fluent Vietnamese expression, rich world knowledge, and sharp multi-step reasoning.
 > 3. **Transparent Chain-of-Thought (`<think>`):** Autonomous procedural reasoning inside a dedicated scratchpad prior to generating final answers, completely eliminating hallucination, gibberish, and repetitive degeneration loops.
-> 4. **Integrated Academic Research Suite (ARS-Codex):** Embedded academic workflow suite (`academic-research-suite`) supporting paper drafting, systematic literature reviews, experimental design, and peer-review simulation.
+> 4. **Autonomous Tool Calling (`<tool_call>`):** Intelligent recognition of real-time queries and large-number arithmetic to invoke external weather, time, and calculator functions in standard JSON format.
+
+---
+
+## 🌟 Core Skills & Capabilities of ViMind 4.0
+
+ViMind 4.0 is equipped with 5 specialized cognitive skill dimensions:
+
+1. **🧠 Multi-step Chain-of-Thought Reasoning (`<think>` CoT Scratchpad):**
+   The model does not guess answers heuristically. Instead, it systematically structures its logical steps within an internal scratchpad before committing to the final answer (essential for math word problems, order of operations, and logical deductions).
+2. **🇻🇳 Deep Vietnamese Native Knowledge & Geography:**
+   Thoroughly grounded in Vietnam's administrative geography (63 provinces including 5 centrally-governed municipalities), North-Central-South regional divisions, historical milestones (Sept 2, 1945 Independence, Dien Bien Phu 1954, Bach Dang 938), and territorial sovereignty over Hoang Sa & Truong Sa.
+3. **⚡ Autonomous Function Calling (`<tool_call>`):**
+   Generates clean, schema-compliant JSON payloads for external tool execution (`calculate_math`, `get_current_weather`, `get_current_time`) whenever queries require real-time lookup or high-precision calculations.
+4. **🔬 Natural Science Explanations:**
+   Provides grounded, physically accurate explanations of scientific phenomena (Earth's day/night cycle via its 24-hour spherical rotation, solar and lunar eclipses, water cycles, chlorophyll, and gravity).
+5. **🛡️ Concise & Anti-Hallucination Communication:**
+   Delivers direct, authoritative, and factually grounded responses without verbose filler phrases, repetitive apologies, or degeneration loops.
 
 ---
 
@@ -47,7 +63,7 @@ Instead of relying on noisy machine-translated datasets (52,000 raw Alpaca sampl
 
 ---
 
-## 🥊 Head-to-Head Battle Results
+## 🥊 Empirical Head-to-Head Battle Results
 
 During empirical evaluation on Kaggle Tesla T4 (Cell 12), both models demonstrated 100% factual accuracy and zero degeneration:
 
@@ -78,26 +94,6 @@ Người dùng muốn tra cứu thời tiết thời gian thực tại Đà Nẵ
 </think>
 <tool_call>{"name": "get_current_weather", "arguments": {"location": "Đà Nẵng"}}</tool_call>
 ```
-
----
-
-## 🎓 Academic Research Skills (ARS-Codex) Integration
-
-ViMind embeds the specialized **ARS-Codex** suite under `.agents/skills/academic-research-suite` to empower academic researchers, students, and AI practitioners:
-
-### Core Research Workflows:
-1. **`deep-research`**: Systematic literature reviews, citation analysis, and Socratic research question refinement.
-2. **`academic-paper`**: Full manuscript drafting, IMRaD outline planning, abstract crafting, citation formatting, and LaTeX publishing (ACL, EMNLP, NeurIPS, IEEE, arXiv).
-3. **`academic-paper-reviewer`**: Simulation of peer-review panels (Reviewers 1, 2, 3) to uncover methodology weaknesses and integrity risks.
-4. **`experiment-agent`**: Experimental execution planning, ablation design, and statistical analysis (PPL, throughput, latency, tool F1 score).
-5. **`academic-pipeline`**: End-to-end orchestration from research inquiry to camera-ready manuscript.
-
-### Command Aliases:
-* `/ars-outline`: Generate structured academic paper outlines.
-* `/ars-abstract`: Draft concise, publication-grade abstracts.
-* `/ars-lit-review`: Synthesize literature and build comparative SLM benchmark tables.
-* `/ars-reviewer`: Run simulated peer review evaluations.
-* `/ars-full`: Execute full end-to-end academic research workflow.
 
 ---
 
@@ -153,7 +149,7 @@ Access the interactive WebUI at `http://localhost:8000` or invoke the API endpoi
 
 ## 📜 Citation
 
-If you utilize ViMind or its research toolchain in your academic publications, please cite:
+If you utilize ViMind in your research or product development, please cite:
 
 ```bibtex
 @article{vimind2026,
